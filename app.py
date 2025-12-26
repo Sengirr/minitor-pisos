@@ -1307,8 +1307,6 @@ elif page_selection == "Configuración":
                 st.dataframe(df_debug.head())
             else:
                 st.warning("Google Sheets está vacío.")
-            else:
-                st.warning("Google Sheets está vacío.")
         else:
             st.error("No se pudo conectar a GSheets para diagnóstico.")
             

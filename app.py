@@ -120,18 +120,21 @@ def load_reviews_db():
     # 1. Intentar cargar de la Nube (Prioridad)
     if GS_CONN and GS_CONN.connect():
         df_cloud = GS_CONN.get_data()
-        st.sidebar.caption(f"☁️ Nube Raw: {len(df_cloud)} filas")
+        # DEBUG VISIBLE EN PANTALLA
         if not df_cloud.empty:
+            st.toast(f"☁️ Nube Cargada: {len(df_cloud)} filas", icon="☁️")
             df = df_cloud
+        else:
+            st.toast("☁️ Nube vacía o error de lectura", icon="⚠️")
 
     # 2. Fallback: CSV Local (si Nube falló o está vacía)
     if df.empty and os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
-        st.sidebar.caption(f"📂 Local Load: {len(df)} filas")
+        st.toast(f"📂 Usando Local: {len(df)} filas", icon="📂")
 
     # 3. Si sigue vacía, devolver estructura base
     if df.empty:
-        st.sidebar.warning("⚠️ No se encontraron datos (Nube ni Local).")
+        st.error("⚠️ DATA ERROR: No se han encontrado datos en Nube ni Local. Ve a Configuración y Repara.")
         return pd.DataFrame(columns=["Date", "Platform", "Name", "Text", "Url", "Hash", "Category", "Cleaner", "Rating"])
 
     # --- NORMALIZACIÓN Y LIMPIEZA (Aplica a Cloud y Local) ---

@@ -1307,8 +1307,53 @@ elif page_selection == "Configuración":
                 st.dataframe(df_debug.head())
             else:
                 st.warning("Google Sheets está vacío.")
+            else:
+                st.warning("Google Sheets está vacío.")
         else:
             st.error("No se pudo conectar a GSheets para diagnóstico.")
+            
+    # --- HERRAMIENTA DE REPARACIÓN DE DATOS (NUEVO) ---
+    st.divider()
+    st.subheader("🚑 Reparación de Base de Datos")
+    st.info("Si ves notas extrañas (ej: 456 en vez de 4.5) o columnas faltantes, pulsa este botón.")
+    if st.button("🔧 Reparar y Normalizar Datos en Nube"):
+        if GS_CONN and GS_CONN.connect():
+            df_fix = GS_CONN.get_data()
+            if not df_fix.empty:
+                # 1. Arreglar Ratings (ej: 456 -> 4.56)
+                if "Rating" in df_fix.columns:
+                    df_fix["Rating"] = pd.to_numeric(df_fix["Rating"], errors="coerce")
+                    # Si es mayor que 10, asumimos que falta dividir por 100 (ej: 456 -> 4.56)
+                    # O dividir por 10 (ej: 45 -> 4.5) - Heurística conservadora
+                    mask_huge = df_fix["Rating"] > 10
+                    df_fix.loc[mask_huge, "Rating"] = df_fix.loc[mask_huge, "Rating"] / 100.0
+                    
+                # 2. Asegurar Columnas Faltantes
+                for col in ["Platform", "Name", "Text", "Url", "Cleaner", "Category", "Hash"]:
+                    if col not in df_fix.columns:
+                        df_fix[col] = "" if col != "Category" else "General"
+                
+                # 3. Generar Hash si falta
+                import hashlib
+                def generate_hash(row):
+                    if row.get("Hash") and len(str(row["Hash"])) > 5: return row["Hash"]
+                    # Hash basado en texto + fecha + nombre
+                    combo = f"{row.get('Date')}{row.get('Name')}{row.get('Text')}"
+                    return hashlib.md5(combo.encode('utf-8')).hexdigest()
+                
+                df_fix["Hash"] = df_fix.apply(generate_hash, axis=1)
+                
+                # 4. Guardar arreglado
+                # Convertir fechas a string para subir
+                if "Date" in df_fix.columns:
+                    df_fix["Date"] = pd.to_datetime(df_fix["Date"]).dt.strftime('%Y-%m-%d %H:%M:%S')
+                    
+                GS_CONN.save_data(df_fix)
+                st.success("✅ Base de datos reparada y normalizada exitosamente. Recarga la página.")
+            else:
+                st.warning("La base de datos está vacía, no hay nada que reparar.")
+        else:
+            st.error("No hay conexión con la Nube.")
     
     st.markdown("Aquí puedes gestionar tu lista de pisos y tu equipo.")
     

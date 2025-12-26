@@ -374,7 +374,14 @@ def get_listing_data(page, url, platform_type):
 def scrape_data_sync(accommodations_list):
     results = []
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as e:
+            st.warning("⚠️ Primer inicio en Nube: Instalando navegador... (Esto tarda unos segundos)")
+            import subprocess
+            subprocess.run(["playwright", "install", "chromium"])
+            browser = p.chromium.launch(headless=True)
+
         page = browser.new_page()
         page.set_extra_http_headers({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"

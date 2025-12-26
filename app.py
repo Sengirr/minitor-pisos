@@ -363,12 +363,15 @@ def get_listing_data(page, url, platform_type):
         text = None
         
         # Palabras prohibidas (header/footer y menús repetitivos)
+        # HEMOS QUITADO: "habitaciones", "baños", "llegada", "fotos", "noche" (Son comunes en reviews)
+        # Palabras prohibidas (header/footer y menús repetitivos)
+        # Indultamos palabras genéricas pero prohibimos las FRASES DE ETIQUETA ("Highlights")
         IGNORE_m = [
             "Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", 
             "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda", 
-            "Compartir", "Guardar", "pestaña", "fotos", "habitaciones", "baños",
-            "fechas", "precios", "consultar", "noche", "total", 
-            "Alojamiento entero", "Superanfitrión", "cancelación", "llegada"
+            "Compartir", "Guardar", "pestaña", "fechas", "precios", "consultar", 
+            "Alojamiento entero", "Superanfitrión", "cancelación",
+            "Muy buena comunicación", "Llegada autónoma", "Date un buen chapuzón", "años de experiencia"
         ]
         
         if platform_type == "Airbnb":
@@ -398,7 +401,11 @@ def get_listing_data(page, url, platform_type):
                         
                         # Apply strict filter to this candidate immediately
                         t_lower = text_cand.lower()
-                        is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
+                        
+                        # Find the SPECIFIC bad word for debugging
+                        bad_word_found = next((bad for bad in IGNORE_m if bad.lower() in t_lower), None)
+                        is_menu = bad_word_found is not None
+                        
                         has_price = "€" in text_cand or "$" in text_cand
                         
                         # Must be substantial text and not menu
@@ -406,6 +413,8 @@ def get_listing_data(page, url, platform_type):
                             text = text_cand
                             st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
                             break 
+                        elif len(text_cand) > 100 and is_menu:
+                             st.write(f"🚫 Rechazado (Culpa de '{bad_word_found}'): {text_cand[:30]}...")
                     if text: break
                 
 
@@ -417,7 +426,8 @@ def get_listing_data(page, url, platform_type):
                     
                     for t in possible_texts:
                         t_lower = t.lower()
-                        is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
+                        bad_word_found = next((bad for bad in IGNORE_m if bad.lower() in t_lower), None)
+                        is_menu = bad_word_found is not None
                         
                         # Filtro extra: Evitar widgets de precios ("350€ noche")
                         has_price = "€" in t or "$" in t
@@ -428,7 +438,7 @@ def get_listing_data(page, url, platform_type):
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
                         elif len(t) > 100 and is_menu:
-                             st.write(f"🚫 Rechazado (Menu/UI): {t[:20]}...")
+                             st.write(f"🚫 Rechazado (Culpa de '{bad_word_found}'): {t[:20]}...")
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 
@@ -478,7 +488,8 @@ def get_listing_data(page, url, platform_type):
                     "Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", 
                     "Ver disponibilidad", "NUEVO", "Vista general", "Info y precio", "Servicios", "Léeme",
                     "Instalaciones", "Limpieza", "Confort", "Personal", "Ubicación",
-                    "m²", "tamaño", "Cocina", "vistas", "aire acondicionado", "baño privado"
+                    "m²", "tamaño", "Cocina", "vistas", "aire acondicionado", "baño privado",
+                    "Tipo de alojamiento", "Número de personas"
                 ]
                 if not text:
                     possible_texts = page.locator("div[data-testid='property-section-reviews']").locator("div, p").all_inner_texts()

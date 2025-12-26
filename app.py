@@ -1136,9 +1136,9 @@ if page_selection == "Dashboard":
                 
         st.divider()
         st.subheader("💬 Últimas Opiniones (Feed General)")
-        if not df_all_revs.empty:
+        if not df.empty:
             st.dataframe(
-                df_all_revs[["Date", "Platform", "Name", "Text", "Category", "Cleaner"]].sort_values(by="Date", ascending=False).head(20),
+                df[["Date", "Platform", "Name", "Text", "Category", "Cleaner"]].sort_values(by="Date", ascending=False).head(20),
                 use_container_width=True,
                 hide_index=True
             )

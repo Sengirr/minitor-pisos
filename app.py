@@ -205,7 +205,9 @@ def load_reviews_db():
         import hashlib
         def _gen_h(row):
             if isinstance(row.get("Hash"), str) and len(row["Hash"]) > 5: return row["Hash"]
-            combo = f"{row.get('Date')}{row.get('Name')}{row.get('Text')}"
+            # Excluimos 'Text' del hash para que si añadimos texto luego, no cambie el ID y podamos deduplicar
+            # Usamos Date + Name + Platform + Rating
+            combo = f"{row.get('Date')}{row.get('Name')}{row.get('Platform')}{row.get('Rating')}"
             return hashlib.md5(combo.encode('utf-8')).hexdigest()
         df["Hash"] = df.apply(_gen_h, axis=1)
     # 5. Reparación de Fechas (Auto-Correction)
@@ -260,7 +262,12 @@ def load_reviews_db():
     if "Date" in df.columns: df["Date"] = pd.to_datetime(df["Date"])
     # ... (Resto igual)
     
-    # Deduplicate
+    # Deduplicate STRONGLY (Business Logic)
+    # Si tenemos la misma review (Fecha, Nombre, Plataforma), nos quedamos con la ÚLTIMA (que tendrá texto si acabamos de escrapear)
+    if "Date" in df.columns and "Name" in df.columns and "Platform" in df.columns:
+         df = df.drop_duplicates(subset=["Date", "Name", "Platform"], keep="last")
+
+    # Deduplicate by Hash (Safety net)
     if "Hash" in df.columns:
         df = df.drop_duplicates(subset=["Hash"], keep="last")
 
@@ -1035,6 +1042,10 @@ if page_selection == "Dashboard":
                     
                     st.toast("🚀 Sincronización iniciada en segundo plano...", icon="🏃‍♂️")
                     st.info("La app está trabajando. Puedes cambiar de pestaña. Los datos aparecerán automáticamente cuando termine.")
+                    
+                    # Mensaje de éxito diferido monitorizando el hilo? (Complejo en Streamlit)
+                    # Simplemente dejamos que el Toast inicial avise.
+                    # El usuario verá los datos refrescarse.
 
         st.divider()
         

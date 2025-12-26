@@ -915,15 +915,43 @@ if page_selection == "Dashboard":
             # Asegurar numérico
             df_kpi_revs["Rating"] = pd.to_numeric(df_kpi_revs["Rating"], errors="coerce")
             
+            # 1. Periodo Actual
             ab_revs = df_kpi_revs[df_kpi_revs["Platform"] == "Airbnb"]
             bk_revs = df_kpi_revs[df_kpi_revs["Platform"] == "Booking"]
             
             if not ab_revs.empty: avg_airbnb_period = ab_revs["Rating"].mean()
             if not bk_revs.empty: avg_booking_period = bk_revs["Rating"].mean()
+
+            # 2. Periodo Anterior (Simulado simple: misma ventana hacia atrás)
+            # Nota: Esto es aproximado para dar sensación de tendencia
+            # En una app real calcularíamos start_date - delta
+            # Aquí usaremos el "resto" de reviews que NO están en el filtro actual como "Pasado"
+            # O mejor, comparamos con la media GLOBAL HISTÓRICA para ver si estamos mejorando el promedio
+            
+            df_all_raw = load_reviews_db()
+            df_all_raw["Rating"] = pd.to_numeric(df_all_raw["Rating"], errors="coerce")
+            
+            global_ab = df_all_raw[df_all_raw["Platform"] == "Airbnb"]["Rating"].mean()
+            global_bk = df_all_raw[df_all_raw["Platform"] == "Booking"]["Rating"].mean()
+            
+            delta_ab = (avg_airbnb_period - global_ab) if avg_airbnb_period and global_ab else 0
+            delta_bk = (avg_booking_period - global_bk) if avg_booking_period and global_bk else 0
         
         # Fallback a "Snapshot" si no hay reviews en el periodo (o mostrar guión)
-        col1.metric("Media Airbnb (Periodo)", f"{avg_airbnb_period:.2f}" if avg_airbnb_period and not pd.isna(avg_airbnb_period) else "-", border=True, help="Nota media de las reseñas recibidas en este periodo.")
-        col2.metric("Media Booking (Periodo)", f"{avg_booking_period:.2f}" if avg_booking_period and not pd.isna(avg_booking_period) else "-", border=True, help="Nota media de las reseñas recibidas en este periodo.")
+        col1.metric(
+            "Media Periodo (Airbnb)", 
+            f"{avg_airbnb_period:.2f}" if avg_airbnb_period else "-", 
+            f"{delta_ab:.2f} vs Global" if avg_airbnb_period else None,
+            border=True, 
+            help="Nota media de las reseñas recibidas en este periodo comparada con la media histórica."
+        )
+        col2.metric(
+            "Media Periodo (Booking)", 
+            f"{avg_booking_period:.2f}" if avg_booking_period else "-", 
+            f"{delta_bk:.2f} vs Global" if avg_booking_period else None, 
+            border=True, 
+            help="Nota media de las reseñas recibidas en este periodo comparada con la media histórica."
+        )
         
         with col3:
              st.write("") # Spacer
@@ -964,8 +992,65 @@ if page_selection == "Dashboard":
 
         st.divider()
         
-        # 2. SECCIÓN CRÍTICA (QUEJAS)
-        st.subheader("⚠️ Atención Requerida (Quejas)")
+        st.divider()
+        
+        # --- FILA 2: INTELIGENCIA DE NEGOCIO (PROBLEMAS + EQUIPO) ---
+        c_probs, c_staff = st.columns([2, 1])
+        
+        with c_probs:
+            st.subheader("🚦 Semáforo de Problemas (Quejas)")
+            if not df.empty:
+                # Filtrar solo negativas para el gráfico (Texto + Nota) y contar Categorías
+                neg_mask = df.apply(lambda x: is_review_negative(x)[0] if "Text" in df.columns else False, axis=1)
+                df_probs = df[neg_mask]
+                
+                if not df_probs.empty:
+                    cat_counts = df_probs["Category"].value_counts().reset_index()
+                    cat_counts.columns = ["Categoría", "Quejas"]
+                    
+                    # Colores de alerta
+                    st.bar_chart(cat_counts.set_index("Categoría"), color="#e74c3c", horizontal=True)
+                else:
+                    st.success("✅ Tráfico limpio: No se detectan volúmenes de quejas en este periodo.")
+            else:
+                st.info("Sin datos.")
+
+        with c_staff:
+            st.subheader("🧹 Snapshot Equipo")
+            if not df.empty and "Cleaner" in df.columns and "Category" in df.columns:
+                # Filtrar quejas DE LIMPIEZA
+                clean_probs = df[(df["Category"] == "Limpieza") & (neg_mask)].copy()
+                if not clean_probs.empty:
+                    staff_counts = clean_probs["Cleaner"].value_counts().reset_index()
+                    staff_counts.columns = ["Staff", "Incidencias"]
+                    st.dataframe(staff_counts, hide_index=True, use_container_width=True)
+                else:
+                    st.info("🧹 Equipo brillando.")
+                    
+                # Mostrar total de limpiezas negativas vs total (si tuviéramos total de asignaciones, 
+                # pero como no trackeamos asignaciones sin review, esto es un proxy de 'quién falla más')
+            else:
+                 st.info("Falta asignar Cleaners.")
+
+        st.divider()
+        
+        # --- FILA 3: ATENCIÓN URGENTE (Bottom 5 + Quejas Recientes) ---
+        c_bottom, c_recent = st.columns([1, 2])
+        
+        with c_bottom:
+             st.subheader("📉 Requieren Atención")
+             st.caption("Peores notas actuales")
+             # Mezclamos Airbnb y Booking para ver lo peor de lo peor
+             all_rank = latest_df[["Name", "Platform", "Rating"]].sort_values(by="Rating", ascending=True).head(5)
+             st.dataframe(
+                 all_rank.style.format({"Rating": "{:.1f}"}).background_gradient(cmap="Reds_r", subset=["Rating"]),
+                 use_container_width=True,
+                 hide_index=True
+             )
+        
+        with c_recent:
+            st.subheader("⚠️ Últimas Quejas")
+            # Logic similar to previous "Quejas" section but compacted
         
         def analyze_review_quality(row):
             """Devuelve (EsNegativa, NotaVisual)"""

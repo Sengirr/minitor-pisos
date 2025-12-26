@@ -147,12 +147,20 @@ def load_reviews_db():
     df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
     df["Rating"] = pd.to_numeric(df["Rating"], errors="coerce")
     
-    # 3. Corregir Escala de Notas (Ej: 456 -> 4.56)
-    # Detectamos notas "imposibles" (> 10) y las dividimos
-    mask_huge = df["Rating"] > 10
-    if mask_huge.any():
-        df.loc[mask_huge, "Rating"] = df.loc[mask_huge, "Rating"] / 100.0
-        # Ojo: si hay un 45, sería /10. Pero asumimos formato "456" de Booking scrapers antiguos.
+    # 3. Corregir Escala de Notas (Inteligente)
+    # A) Corregir números enormes (ej: 456 Airbnb -> 4.56)
+    mask_huge = df["Rating"] > 100
+    df.loc[mask_huge, "Rating"] = df.loc[mask_huge, "Rating"] / 100.0
+
+    # B) Corregir dobles dígitos Booking (ej: 85 -> 8.5)
+    mask_double = (df["Rating"] > 10) & (df["Rating"] <= 100)
+    df.loc[mask_double, "Rating"] = df.loc[mask_double, "Rating"] / 10.0
+
+    # C) RESCATE: Corregir lo que el "Reparador" anterior rompió (ej: 55 se convirtió en 0.55)
+    # Asumimos que ninguna nota legítima es menor que 1.1
+    mask_broken = (df["Rating"] < 1.1) & (df["Rating"] > 0.01)
+    df.loc[mask_broken, "Rating"] = df.loc[mask_broken, "Rating"] * 10
+
     
     # 4. Generar Hash faltante
     if df["Hash"].isnull().any() or (df["Hash"] == "").any():

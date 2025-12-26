@@ -375,14 +375,14 @@ def scrape_data_sync(accommodations_list):
     results = []
     with sync_playwright() as p:
         try:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         except Exception as e:
             st.warning(f"⚠️ Primer inicio en Nube: Instalando navegador... (Puede tardar 1 min)")
             import subprocess
             import sys
             try:
                 subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
             except Exception as e2:
                 st.error(f"❌ Error fatal instalando navegador: {e2}")
                 return []

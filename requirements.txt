@@ -3,3 +3,4 @@ playwright
 pandas
 gspread
 google-auth
+matplotlib

@@ -927,31 +927,40 @@ if page_selection == "Dashboard":
         
         with col3:
              st.write("") # Spacer
-             if st.button("🔄 Sincronizar", use_container_width=True):
+             st.write("") # Spacer
+             if st.button("🔄 Sincronizar (2º Plano)", use_container_width=True, help="Ejecuta la sincronización en segundo plano. Puedes cambiar de pestaña mientras trabaja."):
                 if not accommodations:
                     st.error("Configura primero.")
                 else:
-                    new_data = scrape_data_sync(accommodations)
-                    if new_data:
-                        df_new = pd.DataFrame(new_data)
-                        
-                        # 1. Guardar en local (Append)
-                        header = not os.path.exists(csv_file)
-                        df_new.to_csv(csv_file, mode='a', header=header, index=False)
-                        
-                        # 2. Guardar en Nube (Full Update)
-                        # Cargamos todo lo que existe actualmente
-                        current_db = load_reviews_db()
-                        # Concatenamos lo nuevo
-                        full_db = pd.concat([current_db, df_new], ignore_index=True)
-                        # Guardamos (esto sube a la nube si está conectado y deduplica interno)
-                        save_reviews_db(full_db)
-                        
-                        st.success(f"¡Sincronizado! {len(df_new)} registros nuevos enviados a la nube.")
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.warning("Sin datos nuevos.")
+                    # Lógica de Hilo
+                    import threading
+                    
+                    def _sync_worker():
+                        print("--- Inicio Sync en 2do Plano ---")
+                        try:
+                            new_data = scrape_data_sync(accommodations)
+                            if new_data:
+                                df_new = pd.DataFrame(new_data)
+                                # 1. Local
+                                header = not os.path.exists(csv_file)
+                                df_new.to_csv(csv_file, mode='a', header=header, index=False)
+                                
+                                # 2. Nube
+                                current_db = load_reviews_db()
+                                full_db = pd.concat([current_db, df_new], ignore_index=True)
+                                save_reviews_db(full_db)
+                                print(f"--- Fin Sync: {len(new_data)} nuevos ---")
+                            else:
+                                print("--- Fin Sync: 0 nuevos ---")
+                        except Exception as e:
+                            print(f"--- Error Sync: {e} ---")
+
+                    # Lanzar Hilo
+                    t = threading.Thread(target=_sync_worker)
+                    t.start()
+                    
+                    st.toast("🚀 Sincronización iniciada en segundo plano...", icon="🏃‍♂️")
+                    st.info("La app está trabajando. Puedes cambiar de pestaña. Los datos aparecerán automáticamente cuando termine.")
 
         st.divider()
         

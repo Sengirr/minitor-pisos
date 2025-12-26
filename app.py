@@ -768,8 +768,10 @@ if page_selection == "Inteligencia Artificial":
 if page_selection == "Dashboard":
     st.title("📊 Monitor de Notas")
     
-    if os.path.exists(csv_file):
-        df = pd.read_csv(csv_file)
+    # Cargar todos los datos (Cloud o Local)
+    df = load_reviews_db()
+    
+    if not df.empty:
         if "Name" not in df.columns: df["Name"] = "Desconocido"
         
         # APLICAR FILTRO GLOBAL A NOTAS
@@ -1047,23 +1049,9 @@ if page_selection == "Dashboard":
 elif page_selection == "Comentarios":
     st.title("💬 Buzón de Opiniones")
     
-    reviews_csv = "historico_reviews.csv"
-    import hashlib
+    
+    # (Funciones auxiliares eliminadas porque ya son globales)
 
-    def get_review_hash(text):
-        return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-    def load_reviews_db():
-        if os.path.exists(reviews_csv):
-            df = pd.read_csv(reviews_csv)
-            # Asegurar unicidad por Hash para evitar errores de actualización
-            if "Hash" in df.columns:
-                df = df.drop_duplicates(subset=["Hash"], keep="last")
-            return df
-        return pd.DataFrame(columns=["Hash", "Date", "Platform", "Name", "Text", "New", "Rating"])
-
-    def save_reviews_db(df):
-        df.to_csv(reviews_csv, index=False)
 
     # --- INBOX SECTION ---
     st.markdown("### 📥 Bandeja de Entrada")

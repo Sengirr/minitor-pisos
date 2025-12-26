@@ -385,18 +385,32 @@ def get_listing_data(page, url, platform_type):
             try:
                 candidates = [
                     'span[data-testid="pdp-reviews-review-item-text"]',
-                    'div[dir="ltr"]', # <--- GOLDEN SELECTOR for User Content
+                    'div[dir="ltr"]', # Iterate all of these!
                     '.r1bctolv', 
                     '.ll4r2nl',
                     'div[id^="review-"] span',
                     'div[data-review-id] span',
                 ]
                 for sel in candidates:
-                    loc = page.locator(sel)
-                    if loc.count() > 0:
-                        text = loc.first.inner_text()
-                        st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
-                        break
+                    locs = page.locator(sel).all() # Get ALL instances
+                    for loc in locs:
+                        text_cand = loc.inner_text()
+                        
+                        # Apply strict filter to this candidate immediately
+                        t_lower = text_cand.lower()
+                        is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
+                        has_price = "€" in text_cand or "$" in text_cand
+                        
+                        # Must be substantial text and not menu
+                        if len(text_cand) > 100 and not is_menu and not has_price:
+                            text = text_cand
+                            st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
+                            break 
+                    if text: break
+                
+                # Fallback Bruto (Last Resort)
+                if not text:
+                    # ... (rest of brute force logic) ...
                 
                 # Fallback Bruto Mejorado (ANTI-PRECIO + ANTI-DESC)
                 if not text:

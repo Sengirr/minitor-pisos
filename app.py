@@ -366,11 +366,12 @@ def get_listing_data(page, url, platform_type):
         IGNORE_m = [
             "Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", 
             "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda", 
-            "Compartir", "Guardar", "pestaña", "fotos", "habitaciones", "baños"
+            "Compartir", "Guardar", "pestaña", "fotos", "habitaciones", "baños",
+            "fechas", "precios", "consultar", "noche", "total"
         ]
         
         if platform_type == "Airbnb":
-            # ... (Rating logic remains) ...
+            # ... (Rating logic) ...
             try:
                 r_loc = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
                 if r_loc.count() > 0: rating = float(r_loc.inner_text().replace(',', '.'))
@@ -395,7 +396,7 @@ def get_listing_data(page, url, platform_type):
                         st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
                         break
                 
-                # Fallback Bruto Mejorado (ANTI-MENU + ANTI-TITLE)
+                # Fallback Bruto Mejorado (ANTI-PRECIO)
                 if not text:
                     # Buscamos <p> o <span> profundos, evitando headers
                     possible_texts = page.locator("main").locator("span, p, div").all_inner_texts()
@@ -405,8 +406,10 @@ def get_listing_data(page, url, platform_type):
                         t_lower = t.lower()
                         is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
                         
-                        # Filtro extra: si contiene "★" suele ser el header de rating, lo evitamos
-                        if len(t) > 80 and not is_menu and "★" not in t:
+                        # Filtro extra: Evitar widgets de precios ("350€ noche")
+                        has_price = "€" in t or "$" in t
+                        
+                        if len(t) > 80 and not is_menu and not has_price:
                              text = t
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
@@ -450,10 +453,11 @@ def get_listing_data(page, url, platform_type):
                         st.write(f"✅ Booking Text: *{text[:50]}...*") 
                         break
                 
-                # Fallback Bruto Booking (ANTI-NAV)
+                # Fallback Bruto Booking (ANTI-NAV + ANTI-SCORE-LIST)
                 IGNORE_b = [
                     "Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", 
-                    "Ver disponibilidad", "NUEVO", "Vista general", "Info y precio", "Servicios", "Léeme"
+                    "Ver disponibilidad", "NUEVO", "Vista general", "Info y precio", "Servicios", "Léeme",
+                    "Instalaciones", "Limpieza", "Confort", "Personal", "Ubicación"
                 ]
                 if not text:
                     possible_texts = page.locator("div[data-testid='property-section-reviews']").locator("div, p").all_inner_texts()

@@ -113,8 +113,12 @@ cleaners_file = "cleaners.json"
 csv_file = "historico_reviews.csv"
 reviews_csv = "historico_reviews.csv"
 
+@st.cache_data(ttl=60, show_spinner=False)
 def load_reviews_db():
     """Carga la base de datos de reseñas (CSV local o GSheets)."""
+    # Invalidar caché si se llama explícitamente (trick: Streamlit cache doesn't support manual invalidation easily, 
+    # but relies on TTL. For 'Sync', we might need to clear cache).
+    
     df = pd.DataFrame()
 
     # 1. Intentar cargar de la Nube (Prioridad)
@@ -977,6 +981,10 @@ if page_selection == "Dashboard":
                                 current_db = load_reviews_db()
                                 full_db = pd.concat([current_db, df_new], ignore_index=True)
                                 save_reviews_db(full_db)
+                                
+                                # LIMPIAR CACHÉ PARA QUE SE VEA AL MOMENTO
+                                load_reviews_db.clear()
+                                
                                 print(f"--- Fin Sync: {len(new_data)} nuevos ---")
                             else:
                                 print("--- Fin Sync: 0 nuevos ---")
@@ -1052,13 +1060,77 @@ if page_selection == "Dashboard":
             st.subheader("⚠️ Últimas Quejas")
             # Logic similar to previous "Quejas" section but compacted
         
-        def analyze_review_quality(row):
-            """Devuelve (EsNegativa, NotaVisual)"""
-            text = row["Text"]
-            plat = row["Platform"]
-            
-            # 1. Booking
-            match_bk = re.search(r"[⭐|Puntuación:]\s*(\d+[.,]\d+)", text)
+            def analyze_review_quality(row):
+                """Devuelve (EsNegativa, NotaVisual)"""
+                text = row["Text"]
+                plat = row["Platform"]
+                
+                # SANITIZE INPUT (Fixes TypeError)
+                if not isinstance(text, str):
+                    text = str(text) if pd.notna(text) else ""
+                
+                # 1. Booking
+                match_bk = re.search(r"[⭐|Puntuación:]\s*(\d+[.,]\d+)", text)
+                if match_bk:
+                    try: 
+                        score = float(match_bk.group(1).replace(",", "."))
+                        if plat == "Booking":
+                            return (score < 7.5, f"{score:.1f}")
+                    except: pass
+                
+                # 2. Airbnb
+                match_ab = re.search(r"Valoración:\s*(\d+)\s*estrella", text, re.IGNORECASE)
+                if match_ab:
+                    try: 
+                        stars = int(match_ab.group(1))
+                        if plat == "Airbnb":
+                             return (stars <= 3, f"{stars} ⭐")
+                    except: pass
+                    
+                # 3. Fallback IA
+                cat = detect_category(text)
+                if cat not in ["General", "Otros"]:
+                    return (True, "IA Detect")
+                    
+                return (False, "-")
+    
+            if not df.empty:
+                 # Reutilizamos logica de filtro de negativas
+                 neg_rows = []
+                 for i, row in df.iterrows():
+                     is_n, score = analyze_review_quality(row)
+                     if is_n:
+                         r = row.copy()
+                         r["NotaUI"] = score
+                         neg_rows.append(r)
+                 
+                 if neg_rows:
+                     df_n = pd.DataFrame(neg_rows).sort_values(by="Date", ascending=False).head(5)
+                     st.dataframe(df_n[["Date", "Name", "Text"]], use_container_width=True, hide_index=True)
+                 else:
+                     st.success("Sin quejas recientes.")
+
+        st.divider()
+
+        # --- DETECTOR DE FANTASMAS (Listings sin reviews recientes) ---
+        with st.expander("👻 Detector de Fantasmas (Sin actividad)"):
+            if accommodations and not df.empty:
+                # Nombres con reviews en este periodo
+                active_names = df["Name"].unique()
+                # Todos los nombres configurados
+                all_names = [a["name"] for a in accommodations]
+                
+                ghosts = set(all_names) - set(active_names)
+                
+                if ghosts:
+                    st.warning(f"Estos {len(ghosts)} alojamientos no han recibido ninguna review en el periodo seleccionado. ¿Están bloqueados o muy caros?")
+                    st.write(", ".join(list(ghosts)))
+                else:
+                    st.success("🎉 Todo vivo: Todos tus alojamientos tienen actividad en este periodo.")
+            else:
+                 st.info("Necesitas datos para detectar fantasmas.")
+                
+        st.divider()
             if match_bk:
                 try: 
                     score = float(match_bk.group(1).replace(",", "."))

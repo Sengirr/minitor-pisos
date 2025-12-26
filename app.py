@@ -389,8 +389,9 @@ def get_reviews_for_listing(url, platform):
     return reviews, debug_log
 
 
-# --- NAVEGACIÓN Y FILTROS ---
-st.sidebar.title("Menú")
+# --- SIDEBAR & NAVEGACIÓN ---
+st.sidebar.title("🏨 Monitor Alojamientos")
+st.sidebar.caption("v2.0 (Cloud Repair)") # Version Tag for debugging
 page_selection = st.sidebar.radio("Ir a:", ["Dashboard", "Comentarios", "Limpieza", "Inteligencia Artificial", "Configuración"])
 
 st.sidebar.markdown("---")

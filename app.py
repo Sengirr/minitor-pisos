@@ -363,10 +363,14 @@ def get_listing_data(page, url, platform_type):
         text = None
         
         # Palabras prohibidas (header/footer y menús repetitivos)
-        IGNORE_m = ["Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda"]
+        IGNORE_m = [
+            "Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", 
+            "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda", 
+            "Compartir", "Guardar", "pestaña", "fotos", "habitaciones", "baños"
+        ]
         
         if platform_type == "Airbnb":
-            # --- RATING ---
+            # ... (Rating logic remains) ...
             try:
                 r_loc = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
                 if r_loc.count() > 0: rating = float(r_loc.inner_text().replace(',', '.'))
@@ -388,34 +392,31 @@ def get_listing_data(page, url, platform_type):
                     loc = page.locator(sel)
                     if loc.count() > 0:
                         text = loc.first.inner_text()
-                        st.write(f"✅ Airbnb Text: *{text[:50]}...*") # Feedback Visual
+                        st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
                         break
                 
-                # Fallback Bruto Mejorado (ANTI-MENU)
+                # Fallback Bruto Mejorado (ANTI-MENU + ANTI-TITLE)
                 if not text:
-                    # Buscamos solo <p> o <span> profundos, evitando headers
+                    # Buscamos <p> o <span> profundos, evitando headers
                     possible_texts = page.locator("main").locator("span, p, div").all_inner_texts()
                     if not possible_texts: possible_texts = page.locator("body").locator("span, p, div").all_inner_texts()
                     
                     for t in possible_texts:
-                        # Filtro de Calidad:
-                        # 1. Longitud > 80 (evita titulos cortos)
-                        # 2. No contiene palabras de sistema (Menu, Búsqueda) - CASE INSENSITIVE
                         t_lower = t.lower()
                         is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
                         
-                        if len(t) > 80 and not is_menu:
+                        # Filtro extra: si contiene "★" suele ser el header de rating, lo evitamos
+                        if len(t) > 80 and not is_menu and "★" not in t:
                              text = t
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
                         elif len(t) > 80 and is_menu:
-                             # DEBUG: Ver qué estamos rechazando
-                             st.write(f"🚫 Rechazado (Menu): {t[:20]}...")
+                             st.write(f"🚫 Rechazado (Menu/UI): {t[:20]}...")
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 
         elif platform_type == "Booking":
-            # --- RATING ---
+            # ... (Rating logic) ...
             try:
                 candidates_score = [
                     'div[data-testid="review-score-component"] div',
@@ -446,17 +447,20 @@ def get_listing_data(page, url, platform_type):
                     loc = page.locator(sel).first
                     if loc.count() > 0:
                         text = loc.inner_text()
-                        st.write(f"✅ Booking Text: *{text[:50]}...*") # Feedback Visual
+                        st.write(f"✅ Booking Text: *{text[:50]}...*") 
                         break
                 
-                # Fallback Bruto Booking (ANTI-MENU)
-                IGNORE_b = ["Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", "Ver disponibilidad", "NUEVO"]
+                # Fallback Bruto Booking (ANTI-NAV)
+                IGNORE_b = [
+                    "Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", 
+                    "Ver disponibilidad", "NUEVO", "Vista general", "Info y precio", "Servicios", "Léeme"
+                ]
                 if not text:
                     possible_texts = page.locator("div[data-testid='property-section-reviews']").locator("div, p").all_inner_texts()
                     if not possible_texts: possible_texts = page.locator("main").locator("div, p").all_inner_texts()
                     
                     for t in possible_texts:
-                         if len(t) > 80 and not any(bad in t for bad in IGNORE_b):
+                         if len(t) > 80 and not any(bad in t for bad in IGNORE_b) and "puntuación" not in t.lower():
                              text = t
                              st.write(f"⚠️ Booking Text (Brute): *{text[:50]}...*")
                              break

@@ -356,8 +356,8 @@ def get_listing_data(page, url, platform_type):
         rating = None
         text = None
         
-        # Palabras prohibidas (header/footer)
-        IGNORE_m = ["Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", "Traducción", "Anfitrión", "Evaluación"]
+        # Palabras prohibidas (header/footer y menús repetitivos)
+        IGNORE_m = ["Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda"]
         
         if platform_type == "Airbnb":
             # --- RATING ---
@@ -375,7 +375,8 @@ def get_listing_data(page, url, platform_type):
                     'span[data-testid="pdp-reviews-review-item-text"]',
                     '.r1bctolv', 
                     '.ll4r2nl',
-                    'div[id^="review-"] span'
+                    'div[id^="review-"] span',
+                    'div[data-review-id] span',
                 ]
                 for sel in candidates:
                     loc = page.locator(sel)
@@ -384,14 +385,19 @@ def get_listing_data(page, url, platform_type):
                         st.write(f"✅ Airbnb Text: *{text[:50]}...*") # Feedback Visual
                         break
                 
-                # Fallback Bruto Mejorado
+                # Fallback Bruto Mejorado (ANTI-MENU)
                 if not text:
-                    # Intentar buscar solo en el main para evitar headers
-                    possible_texts = page.locator("main").locator("div, span").all_inner_texts()
-                    if not possible_texts: possible_texts = page.locator("body").locator("div, span").all_inner_texts()
+                    # Buscamos solo <p> o <span> profundos, evitando headers
+                    possible_texts = page.locator("main").locator("span, p, div").all_inner_texts()
+                    if not possible_texts: possible_texts = page.locator("body").locator("span, p, div").all_inner_texts()
                     
                     for t in possible_texts:
-                        if len(t) > 60 and not any(bad in t for bad in IGNORE_m):
+                        # Filtro de Calidad:
+                        # 1. Longitud > 80 (evita titulos cortos)
+                        # 2. No contiene palabras de sistema (Menu, Búsqueda)
+                        # 3. No es una repetición loca (NUEVO NUEVO)
+                        is_menu = any(bad in t for bad in IGNORE_m)
+                        if len(t) > 80 and not is_menu:
                              text = t
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
@@ -423,7 +429,8 @@ def get_listing_data(page, url, platform_type):
                     'div[data-testid="featured-review-text"]',
                     'div.c-review-block__row',
                     'div[itemprop="reviewBody"]',
-                    'div.review_item_review_content'
+                    'div.review_item_review_content',
+                    'div.c-review__body'
                 ]
                 for sel in candidates_text:
                     loc = page.locator(sel).first
@@ -432,14 +439,14 @@ def get_listing_data(page, url, platform_type):
                         st.write(f"✅ Booking Text: *{text[:50]}...*") # Feedback Visual
                         break
                 
-                # Fallback Bruto Booking
-                IGNORE_b = ["Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", "Ver disponibilidad"]
+                # Fallback Bruto Booking (ANTI-MENU)
+                IGNORE_b = ["Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", "Ver disponibilidad", "NUEVO"]
                 if not text:
                     possible_texts = page.locator("div[data-testid='property-section-reviews']").locator("div, p").all_inner_texts()
                     if not possible_texts: possible_texts = page.locator("main").locator("div, p").all_inner_texts()
                     
                     for t in possible_texts:
-                         if len(t) > 50 and not any(bad in t for bad in IGNORE_b):
+                         if len(t) > 80 and not any(bad in t for bad in IGNORE_b):
                              text = t
                              st.write(f"⚠️ Booking Text (Brute): *{text[:50]}...*")
                              break

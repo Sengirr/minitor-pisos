@@ -107,7 +107,7 @@ def check_crisis(text):
 # --- FUNCIONES DE CARGA/GUARDADO ---
 json_file = "alojamientos.json"
 cleaners_file = "cleaners.json"
-csv_file = "historico_notas.csv"
+csv_file = "historico_reviews.csv"
 reviews_csv = "historico_reviews.csv"
 
 def load_reviews_db():

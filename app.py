@@ -197,8 +197,11 @@ try:
                         df_alert.loc[df_alert["Hash"] == row["Hash"], "Crisis"] = False
                         save_reviews_db(df_alert)
                         st.rerun()
-except:
-    pass
+except Exception as e:
+    st.sidebar.error(f"🚨 Error Crítico en Carga Inicial: {e}")
+    # Show traceback for debugging
+    import traceback
+    st.sidebar.code(traceback.format_exc())
 
 def load_accommodations():
     if os.path.exists(json_file):

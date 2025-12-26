@@ -1131,115 +1131,11 @@ if page_selection == "Dashboard":
                  st.info("Necesitas datos para detectar fantasmas.")
                 
         st.divider()
-            if match_bk:
-                try: 
-                    score = float(match_bk.group(1).replace(",", "."))
-                    if plat == "Booking":
-                        return (score < 7.5, f"{score:.1f}")
-                except: pass
-            
-            # 2. Airbnb
-            match_ab = re.search(r"Valoración:\s*(\d+)\s*estrella", text, re.IGNORECASE)
-            if match_ab:
-                try: 
-                    stars = int(match_ab.group(1))
-                    if plat == "Airbnb":
-                         return (stars <= 3, f"{stars} ⭐")
-                except: pass
-                
-            # 3. Fallback IA
-            cat = detect_category(text)
-            if cat not in ["General", "Otros"]:
-                return (True, "IA Detect")
-                
-            return (False, "-")
 
-        if os.path.exists(reviews_csv):
-            df_all_revs = load_reviews_db()
-            # FILTRO GLOBAL
-            df_all_revs = filter_by_date(df_all_revs)
-            
-            if not df_all_revs.empty:
-                negative_rows = []
-                # Solo analizamos las NEGATIVAS para esta sección
-                for i, row in df_all_revs.iterrows():
-                    is_neg, score_str = analyze_review_quality(row)
-                    if is_neg:
-                        r_copy = row.copy()
-                        r_copy["Nota"] = score_str
-                        negative_rows.append(r_copy)
-                
-                if negative_rows:
-                    df_neg = pd.DataFrame(negative_rows).sort_values(by="Date", ascending=False).head(10)
-                    
-                    for i, row in df_neg.iterrows():
-                        row_hash = row["Hash"]
-                        icon = "🅱️" if row["Platform"] == "Booking" else "🅰️"
-                        
-                        with st.container(border=True):
-                            c_head, c_score = st.columns([4, 1])
-                            c_head.markdown(f"**{icon} {row['Name']}**  |  📅 {row['Date']}")
-                            c_score.error(f"Nota: {row.get('Nota', '-')}")
+
+
                             
-                            # Limpiar Texto para visualización limpia
-                            txt_clean = row["Text"]
-                            txt_clean = re.sub(r"Lleva\s+\d+\s+.*?\s+en\s+Airbnb", "", txt_clean, flags=re.IGNORECASE)
-                            txt_clean = re.sub(r"Traducido del \w+", "", txt_clean, flags=re.IGNORECASE)
-                            txt_clean = re.sub(r"Mostrar el original", "", txt_clean, flags=re.IGNORECASE)
-                            # Limpiar nota repetida
-                            txt_clean = re.sub(r"Valoraci.n:\s*\d+(?:\.\d)?\s*estrellas", "", txt_clean, flags=re.IGNORECASE)
-                            txt_clean = txt_clean.strip(" ,.-·")
-                            
-                            st.write(txt_clean)
-                            
-                            c_cat, c_clean = st.columns([1, 1])
-                            
-                            # Logica Selectores
-                            current_matches = df_all_revs[df_all_revs["Hash"] == row_hash]
-                            current_cat = "General"
-                            current_cleaner = "Sin asignar"
-                            
-                            if not current_matches.empty:
-                                if pd.notna(current_matches.iloc[0].get("Category")):
-                                    current_cat = current_matches.iloc[0]["Category"]
-                                if pd.notna(current_matches.iloc[0].get("Cleaner")):
-                                    current_cleaner = current_matches.iloc[0]["Cleaner"]
-                            
-                            new_cat = c_cat.selectbox("🏷️ Categoría:", CATEGORIES_LIST, index=CATEGORIES_LIST.index(current_cat) if current_cat in CATEGORIES_LIST else 0, key=f"dash_cat_{row_hash}")
-                            
-                            opt_clean = ["Sin asignar"] + cleaners
-                            try: idx_c = opt_clean.index(current_cleaner)
-                            except: idx_c = 0
-                            new_cleaner = c_clean.selectbox("🧹 Asignar:", opt_clean, index=idx_c, key=f"dash_clean_{row_hash}")
-                                
-                            if new_cleaner != current_cleaner or new_cat != current_cat:
-                                saved_successfully = False
-                                try:
-                                    # CRITICAL FIX: Reload FULL DB to avoid deleting filtered rows
-                                    df_full_save = load_reviews_db()
-                                    
-                                    # Ensure Hash is string for matching
-                                    df_full_save["Hash"] = df_full_save["Hash"].astype(str)
-                                    row_hash_str = str(row_hash)
-                                    
-                                    if row_hash_str in df_full_save["Hash"].values:
-                                        df_full_save.loc[df_full_save["Hash"] == row_hash_str, "Cleaner"] = new_cleaner if new_cleaner != "Sin asignar" else None
-                                        df_full_save.loc[df_full_save["Hash"] == row_hash_str, "Category"] = new_cat
-                                        save_reviews_db(df_full_save)
-                                        saved_successfully = True
-                                    else:
-                                        st.error(f"Error: No se encontró la reseña con hash {row_hash_str} en la base de datos completa.")
-                                except Exception as e:
-                                    st.error(f"Error guardando los cambios: {e}")
-                                
-                                if saved_successfully:
-                                    st.toast("Guardado correctamente!")
-                                    time.sleep(0.5)
-                                    st.rerun()
-                else:
-                    st.success("✅ No hay quejas críticas en este periodo.")
-            
-            st.divider()
+
             
             # 3. ÚLTIMAS OPINIONES (GENERAL)
             st.subheader("💬 Últimas Opiniones (Feed General)")

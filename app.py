@@ -342,82 +342,97 @@ accommodations = load_accommodations()
 # --- FUNCIONES DE SCRAPING --- (Resto igual)
 
 # --- FUNCIONES DE SCRAPING ---
+# --- FUNCIONES DE SCRAPING ---
 def get_listing_data(page, url, platform_type):
     try:
+        # User-Agent handling is done at context level, but good to be safe
+        print(f"🌍 Navigating to: {url} ({platform_type})") 
         page.goto(url, timeout=60000)
-        page.wait_for_timeout(4000) # Un poco más de espera para carga dinámica
+        page.wait_for_timeout(5000) # Wait for dynamic content
         
         rating = None
-        text = "Comentario no detectado automáticamente."
+        text = None
         
         if platform_type == "Airbnb":
             # --- RATING ---
             try:
-                # Intento 1: Cabecera nueva
-                rating_locator = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
-                if rating_locator.count() > 0:
-                     rating_text = rating_locator.inner_text()
+                # 1. Guest Favorites Header
+                r_loc = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
+                if r_loc.count() > 0: rating = float(r_loc.inner_text().replace(',', '.'))
                 else:
-                    # Intento 2: Banner clásico
-                    rating_locator = page.locator('div[data-testid="pdp-reviews-highlight-banner-host-rating"] > div > span > span').first
-                    rating_text = rating_locator.inner_text() if rating_locator.count() > 0 else None
-            except:
-                rating_text = None
+                    # 2. Classic Star/Rating
+                    r_loc = page.locator('span.a8jhwvl').first # New obfuscated
+                    if r_loc.count() > 0: rating = float(r_loc.inner_text().split()[0].replace(',', '.'))
+            except: pass
             
-            if rating_text:
-                try: rating = float(rating_text.replace(',', '.').split()[0])
-                except: pass
-
-            # --- TEXTO (Comentarios) ---
+            # --- TEXTO ---
             try:
-                # Buscamos el primer bloque de texto de reseña visible
-                # Selectores comunes de Airbnb (cambian mucho)
-                reviews = page.locator('span[data-testid="pdp-reviews-review-item-text"]')
-                if reviews.count() > 0:
-                    text = reviews.first.inner_text()
-                else:
-                    # Fallback: buscar cualquier texto largo dentro de la sección de reviews
-                    reviews_alt = page.locator('.ll4r2nl') # Clase ofuscada común a veces
-                    if reviews_alt.count() > 0:
-                        text = reviews_alt.first.inner_text()
-            except:
-                pass
+                # Try generic semantic selectors first
+                # Look for the first review text block
+                candidates = [
+                    'span[data-testid="pdp-reviews-review-item-text"]',
+                    '.r1bctolv', # Common obfuscated class for review text
+                    '.ll4r2nl',
+                    'div[id^="review-"] span'
+                ]
+                
+                for sel in candidates:
+                    loc = page.locator(sel)
+                    if loc.count() > 0:
+                        text = loc.first.inner_text()
+                        print(f"✅ Found Airbnb Text ({sel}): {text[:30]}...")
+                        break
+            except Exception as e:
+                print(f"⚠️ Airbnb Text Error: {e}")
 
         elif platform_type == "Booking":
             # --- RATING ---
             try:
-                rating_locator = page.locator('div[data-testid="review-score-component"]').first
-                rating_text = rating_locator.inner_text() if rating_locator.count() > 0 else None
-                if not rating_text:
-                     rating_locator = page.locator('div[data-testid="header-review-score"]').first
-                     rating_text = rating_locator.inner_text() if rating_locator.count() > 0 else None
-            except:
-                rating_text = None
-
-            if rating_text:
-                 try:
-                    match = re.search(r"(\d+[,.]\d+)", rating_text)
-                    if match: rating = float(match.group(1).replace(',', '.'))
-                 except: pass
+                # Booking often puts rating in a distinct box
+                candidates_score = [
+                    'div[data-testid="review-score-component"] div',
+                    'div[data-testid="header-review-score"] div',
+                    '.ac4a7896c7' # Common score class
+                ]
+                for sel in candidates_score:
+                    loc = page.locator(sel).first
+                    if loc.count() > 0:
+                        try:
+                            # Extract first number "8,5"
+                            val = re.search(r"(\d+[,.]\d+)", loc.inner_text())
+                            if val:
+                                rating = float(val.group(1).replace(',', '.'))
+                                break
+                        except: pass
+            except: pass
             
-            # --- TEXTO (Comentarios) ---
+            # --- TEXTO ---
             try:
-                # Booking suele tener "Lo que más gustó" y "Lo que menos"
-                # Intentamos coger el primer comentario de usuario visible
-                comment_loc = page.locator('div[data-testid="featured-review-text"]').first
-                if comment_loc.count() > 0:
-                    text = comment_loc.inner_text()
-                else:
-                    # Intentar buscar en lista de reviews si aparece en la home
-                    list_loc = page.locator('div.c-review-block__row').first
-                    if list_loc.count() > 0:
-                        text = list_loc.inner_text()
-            except:
-                pass
+                # Booking Featured Review
+                candidates_text = [
+                    'div[data-testid="featured-review-text"]',
+                    'div.c-review-block__row',
+                    'div[itemprop="reviewBody"]',
+                    'div.review_item_review_content'
+                ]
+                for sel in candidates_text:
+                    loc = page.locator(sel).first
+                    if loc.count() > 0:
+                        text = loc.inner_text()
+                        print(f"✅ Found Booking Text ({sel}): {text[:30]}...")
+                        break
+            except Exception as e:
+                print(f"⚠️ Booking Text Error: {e}")
         
+        # Default text if nothing found but page worked
+        if not text:
+            text = "Comentario no detectado. (Posible selector anticuado)"
+            print(f"❌ Text NOT found for {url}")
+            
         return rating, text
+        
     except Exception as e:
-        print(f"Error scraping {url}: {e}")
+        print(f"🔥 Error scraping {url}: {e}")
         return None, None
 
 def scrape_data_sync(accommodations_list):

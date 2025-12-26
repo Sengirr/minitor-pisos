@@ -137,12 +137,82 @@ def load_reviews_db():
         st.error("⚠️ DATA ERROR: No se han encontrado datos en Nube ni Local. Ve a Configuración y Repara.")
         return pd.DataFrame(columns=["Date", "Platform", "Name", "Text", "Url", "Hash", "Category", "Cleaner", "Rating"])
 
-    # --- NORMALIZACIÓN Y LIMPIEZA (Aplica a Cloud y Local) ---
-    # Asegurar tipos
+    # --- NORMALIZACIÓN AUTOMÁTICA (AUTO-REPAIR) ---
+    # 1. Asegurar Esqueleto (Columnas mínimas)
+    for col in ["Platform", "Name", "Text", "Url", "Cleaner", "Category", "Hash", "Rating", "Date"]:
+        if col not in df.columns:
+            df[col] = "" if col != "Category" else "General"
+            
+    # 2. Corregir Tipos de Datos
+    df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
+    df["Rating"] = pd.to_numeric(df["Rating"], errors="coerce")
+    
+    # 3. Corregir Escala de Notas (Ej: 456 -> 4.56)
+    # Detectamos notas "imposibles" (> 10) y las dividimos
+    mask_huge = df["Rating"] > 10
+    if mask_huge.any():
+        df.loc[mask_huge, "Rating"] = df.loc[mask_huge, "Rating"] / 100.0
+        # Ojo: si hay un 45, sería /10. Pero asumimos formato "456" de Booking scrapers antiguos.
+    
+    # 4. Generar Hash faltante
+    if df["Hash"].isnull().any() or (df["Hash"] == "").any():
+        import hashlib
+        def _gen_h(row):
+            if isinstance(row.get("Hash"), str) and len(row["Hash"]) > 5: return row["Hash"]
+            combo = f"{row.get('Date')}{row.get('Name')}{row.get('Text')}"
+            return hashlib.md5(combo.encode('utf-8')).hexdigest()
+        df["Hash"] = df.apply(_gen_h, axis=1)
+    # 5. Reparación de Fechas (Auto-Correction)
+    # Solo si la fecha es inválida o queremos asegurar
+    # (Hacemos un pase rápido por las filas que tengan Texto pero fecha dudosa)
+    from datetime import datetime, timedelta
+    
+    def _parse_relative_date(txt):
+        if not isinstance(txt, str): return None
+        now = datetime.now()
+        
+        # 1. Relativos (Hace X)
+        m_d = re.search(r"Hace (\d+)\s*días", txt, re.IGNORECASE)
+        if m_d: return now - timedelta(days=int(m_d.group(1)))
+        
+        m_w = re.search(r"Hace (\d+)\s*semana", txt, re.IGNORECASE)
+        if m_w: return now - timedelta(weeks=int(m_w.group(1)))
+        
+        m_m = re.search(r"Hace (\d+)\s*mes", txt, re.IGNORECASE)
+        if m_m: return now - timedelta(days=int(m_m.group(1))*30)
+        
+        # 2. Absolutos (20 de Octubre de 2024)
+        m_long = re.search(r"(\d{1,2}) de (\w+) de (\d{4})", txt, re.IGNORECASE)
+        if m_long:
+            try:
+                day = int(m_long.group(1))
+                month_str = m_long.group(2).lower()
+                year = int(m_long.group(3))
+                month_map = {
+                    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
+                    "julio": 7, "agosto": 8, "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12
+                }
+                if month_str in month_map:
+                    return datetime(year, month_map[month_str], day)
+            except: pass
+            
+        return None
+
+    # Aplicar corrección solo si la fecha es NaT o vacía? 
+    # O mejor siempre para Booking/Airbnb relativos recientes?
+    # Por eficiencia, lo haremos solo si Date es NaT
+    mask_bad_date = df["Date"].isnull() | (df["Date"] == "")
+    if mask_bad_date.any():
+        # Iteramos solo las malas
+        for idx in df[mask_bad_date].index:
+            new_date = _parse_relative_date(df.at[idx, "Text"])
+            if new_date:
+                df.at[idx, "Date"] = new_date
+
+    # --- NORMALIZACIÓN FINAL ---
+    # Asegurar tipos finales
     if "Date" in df.columns: df["Date"] = pd.to_datetime(df["Date"])
     # ... (Resto igual)
-    
-    # ...
     
     # Deduplicate
     if "Hash" in df.columns:
@@ -768,20 +838,8 @@ if page_selection == "Inteligencia Artificial":
 if page_selection == "Dashboard":
     st.title("📊 Monitor de Notas")
     
-    # DEBUG EXTREMO
-    st.write("🔍 DEBUG: Iniciando Carga de Datos...")
-    
     # Cargar todos los datos (Cloud o Local)
-    try:
-        df = load_reviews_db()
-        st.write(f"🔍 DEBUG: Datos Cargados. Filas: {len(df)}")
-        if not df.empty:
-            st.dataframe(df.head())
-        else:
-            st.error("🔍 DEBUG: DataFrame está VACÍO tras la carga.")
-    except Exception as e:
-        st.error(f"💀 CRASH cargando DB: {e}")
-        df = pd.DataFrame()
+    df = load_reviews_db()
     
     if not df.empty:
         if "Name" not in df.columns: df["Name"] = "Desconocido"
@@ -1319,48 +1377,7 @@ elif page_selection == "Configuración":
         else:
             st.error("No se pudo conectar a GSheets para diagnóstico.")
             
-    # --- HERRAMIENTA DE REPARACIÓN DE DATOS (NUEVO) ---
-    st.divider()
-    st.subheader("🚑 Reparación de Base de Datos")
-    st.info("Si ves notas extrañas (ej: 456 en vez de 4.5) o columnas faltantes, pulsa este botón.")
-    if st.button("🔧 Reparar y Normalizar Datos en Nube"):
-        if GS_CONN and GS_CONN.connect():
-            df_fix = GS_CONN.get_data()
-            if not df_fix.empty:
-                # 1. Arreglar Ratings (ej: 456 -> 4.56)
-                if "Rating" in df_fix.columns:
-                    df_fix["Rating"] = pd.to_numeric(df_fix["Rating"], errors="coerce")
-                    # Si es mayor que 10, asumimos que falta dividir por 100 (ej: 456 -> 4.56)
-                    # O dividir por 10 (ej: 45 -> 4.5) - Heurística conservadora
-                    mask_huge = df_fix["Rating"] > 10
-                    df_fix.loc[mask_huge, "Rating"] = df_fix.loc[mask_huge, "Rating"] / 100.0
-                    
-                # 2. Asegurar Columnas Faltantes
-                for col in ["Platform", "Name", "Text", "Url", "Cleaner", "Category", "Hash"]:
-                    if col not in df_fix.columns:
-                        df_fix[col] = "" if col != "Category" else "General"
-                
-                # 3. Generar Hash si falta
-                import hashlib
-                def generate_hash(row):
-                    if row.get("Hash") and len(str(row["Hash"])) > 5: return row["Hash"]
-                    # Hash basado en texto + fecha + nombre
-                    combo = f"{row.get('Date')}{row.get('Name')}{row.get('Text')}"
-                    return hashlib.md5(combo.encode('utf-8')).hexdigest()
-                
-                df_fix["Hash"] = df_fix.apply(generate_hash, axis=1)
-                
-                # 4. Guardar arreglado
-                # Convertir fechas a string para subir
-                if "Date" in df_fix.columns:
-                    df_fix["Date"] = pd.to_datetime(df_fix["Date"]).dt.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                GS_CONN.save_data(df_fix)
-                st.success("✅ Base de datos reparada y normalizada exitosamente. Recarga la página.")
-            else:
-                st.warning("La base de datos está vacía, no hay nada que reparar.")
-        else:
-            st.error("No hay conexión con la Nube.")
+
     
     st.markdown("Aquí puedes gestionar tu lista de pisos y tu equipo.")
     
@@ -1368,86 +1385,7 @@ elif page_selection == "Configuración":
     # ...
 
 
-# REPARACIÓN DE FECHAS (NUEVO)
-    with st.expander("🛠️ Reparación de Fechas (Avanzado)"):
-        st.warning("⚠️ Esto intentará leer la fecha real del texto del comentario y sobrescribir la fecha de registro.")
-        if st.button("🔧 Intentar Extraer Fechas Reales"):
-            df_fix = load_reviews_db()
-            count_fixed = 0
-            
-            # Helper meses español
-            month_map = {
-                "enero": 1, "febrero": 2, "marzo": 3, "abril": 4, "mayo": 5, "junio": 6,
-                "julio": 7, "agosto": 8, "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12
-            }
-            
-            # Helper para rating
-            def extract_rating(txt, platform):
-                # Airbnb
-                match_ab = re.search(r"Valoraci.n:\s*(\d+(?:\.\d)?)\s*estrellas", txt, re.IGNORECASE)
-                if match_ab: return float(match_ab.group(1))
-                
-                # Booking
-                match_bk = re.search(r"Puntuaci.n:?\s*(\d+(?:[\.,]\d)?)", txt, re.IGNORECASE) # 8,5 or 8.5
-                if match_bk:
-                    val = match_bk.group(1).replace(",", ".")
-                    return float(val) / 2 # Booking is /10, convert to /5? Or keep raw? User wants /5 stars usually.
-                    return float(val) 
-                return None
 
-            for index, row in df_fix.iterrows():
-                    txt = row["Text"]
-                    plat = row["Platform"]
-                    
-                    # --- FECHAS (YA EXISTENTE) ---
-                    new_date = None
-                    # ... (Existing Date Logic) ...
-                    # 1. Airbnb Relativos (Días, Semanas, Meses)
-                    match_days = re.search(r"Hace (\d+)\s*días", txt, re.IGNORECASE)
-                    if match_days:
-                        days_ago = int(match_days.group(1))
-                        new_date = datetime.now() - pd.Timedelta(days=days_ago)
-                    
-                    if not new_date:
-                        match_weeks = re.search(r"Hace (\d+)\s*semana", txt, re.IGNORECASE)
-                        if match_weeks:
-                            w_ago = int(match_weeks.group(1))
-                            new_date = datetime.now() - pd.Timedelta(weeks=w_ago)
-
-                    if not new_date:
-                        match_months = re.search(r"Hace (\d+)\s*mes", txt, re.IGNORECASE)
-                        if match_months:
-                            m_ago = int(match_months.group(1))
-                            new_date = datetime.now() - pd.Timedelta(days=m_ago*30)
-                    
-                    # ... [Keep lines 1113-1144 same logic basically, just re-inserting] ...
-                    # To minimize diff, I will just add rating logic below the date logic if I can targeting.
-                    # But I am replacing the block "for index, row..." so I must provide full body.
-                    
-                    # 2. Airbnb "X de Mes de Año"
-                    if not new_date:
-                        match_long = re.search(r"(\d{1,2}) de (\w+) de (\d{4})", txt, re.IGNORECASE)
-                        if match_long:
-                            try:
-                                d, m_txt, y = match_long.groups()
-                                m = month_map.get(m_txt.lower(), 1)
-                                new_date = datetime(int(y), m, int(d))
-                            except: pass
-                    
-                    # 3. Booking / Genérico
-                    if not new_date:
-                        match_loose = re.search(r"(\d{1,2})\s+(\w+)\s+(\d{4})", txt, re.IGNORECASE)
-                        if match_loose:
-                             try:
-                                d, m_txt, y = match_loose.groups()
-                                m = month_map.get(m_txt.lower())
-                                if m: new_date = datetime(int(y), m, int(d))
-                             except: pass
-
-                    # 4. Booking "Comentado el: ..."
-                    if not new_date:
-                        match_bk = re.search(r"Comentado el (\d{1,2}) de (\w+) de (\d{4})", txt, re.IGNORECASE)
-                        if match_bk:
                             try:
                                 d, m_txt, y = match_bk.groups()
                                 m = month_map.get(m_txt.lower(), 1)
@@ -1459,19 +1397,7 @@ elif page_selection == "Configuración":
                          count_fixed += 1
                     
                     # --- RATING (NUEVO) ---
-                    curr_rating = row.get("Rating")
-                    if pd.isna(curr_rating) or str(curr_rating) == "" or str(curr_rating) == "nan":
-                        r_val = extract_rating(txt, plat)
-                        if r_val:
-                            df_fix.loc[index, "Rating"] = r_val
-            
-            if count_fixed > 0:
-                save_reviews_db(df_fix)
-                st.success(f"¡Hecho! Se han corregido {count_fixed} fechas. ¡Ahora los filtros funcionarán mejor!")
-                time.sleep(2)
-                st.rerun()
-            else:
-                st.info("No se encontraron nuevos patrones de fecha.")
+
 
     with st.expander("➕ Añadir Nuevo Alojamiento"):
          with st.form("new_acc_form"):

@@ -120,17 +120,13 @@ def load_reviews_db():
     # 1. Intentar cargar de la Nube (Prioridad)
     if GS_CONN and GS_CONN.connect():
         df_cloud = GS_CONN.get_data()
-        # DEBUG VISIBLE EN PANTALLA
         if not df_cloud.empty:
-            st.toast(f"☁️ Nube Cargada: {len(df_cloud)} filas", icon="☁️")
             df = df_cloud
-        else:
-            st.toast("☁️ Nube vacía o error de lectura", icon="⚠️")
 
     # 2. Fallback: CSV Local (si Nube falló o está vacía)
     if df.empty and os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
-        st.toast(f"📂 Usando Local: {len(df)} filas", icon="📂")
+
 
     # 3. Si sigue vacía, devolver estructura base
     if df.empty:
@@ -224,9 +220,7 @@ def load_reviews_db():
     
     # Deduplicate
     if "Hash" in df.columns:
-        before_dedup = len(df)
         df = df.drop_duplicates(subset=["Hash"], keep="last")
-        st.sidebar.caption(f"🧹 Tras Deduplicar: {len(df)} filas (Eliminadas: {before_dedup - len(df)})")
 
     return df
 

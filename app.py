@@ -934,9 +934,21 @@ if page_selection == "Dashboard":
                     new_data = scrape_data_sync(accommodations)
                     if new_data:
                         df_new = pd.DataFrame(new_data)
+                        
+                        # 1. Guardar en local (Append)
                         header = not os.path.exists(csv_file)
                         df_new.to_csv(csv_file, mode='a', header=header, index=False)
-                        st.success(f"Updated!")
+                        
+                        # 2. Guardar en Nube (Full Update)
+                        # Cargamos todo lo que existe actualmente
+                        current_db = load_reviews_db()
+                        # Concatenamos lo nuevo
+                        full_db = pd.concat([current_db, df_new], ignore_index=True)
+                        # Guardamos (esto sube a la nube si está conectado y deduplica interno)
+                        save_reviews_db(full_db)
+                        
+                        st.success(f"¡Sincronizado! {len(df_new)} registros nuevos enviados a la nube.")
+                        time.sleep(2)
                         st.rerun()
                     else:
                         st.warning("Sin datos nuevos.")

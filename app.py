@@ -296,28 +296,46 @@ accommodations = load_accommodations()
 def get_listing_data(page, url, platform_type):
     try:
         page.goto(url, timeout=60000)
-        page.wait_for_timeout(3000) 
+        page.wait_for_timeout(4000) # Un poco más de espera para carga dinámica
         
         rating = None
+        text = "Comentario no detectado automáticamente."
         
         if platform_type == "Airbnb":
+            # --- RATING ---
             try:
+                # Intento 1: Cabecera nueva
                 rating_locator = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
                 if rating_locator.count() > 0:
                      rating_text = rating_locator.inner_text()
                 else:
+                    # Intento 2: Banner clásico
                     rating_locator = page.locator('div[data-testid="pdp-reviews-highlight-banner-host-rating"] > div > span > span').first
                     rating_text = rating_locator.inner_text() if rating_locator.count() > 0 else None
             except:
                 rating_text = None
             
             if rating_text:
-                try:
-                    rating = float(rating_text.replace(',', '.').split()[0])
-                except:
-                    pass
+                try: rating = float(rating_text.replace(',', '.').split()[0])
+                except: pass
+
+            # --- TEXTO (Comentarios) ---
+            try:
+                # Buscamos el primer bloque de texto de reseña visible
+                # Selectores comunes de Airbnb (cambian mucho)
+                reviews = page.locator('span[data-testid="pdp-reviews-review-item-text"]')
+                if reviews.count() > 0:
+                    text = reviews.first.inner_text()
+                else:
+                    # Fallback: buscar cualquier texto largo dentro de la sección de reviews
+                    reviews_alt = page.locator('.ll4r2nl') # Clase ofuscada común a veces
+                    if reviews_alt.count() > 0:
+                        text = reviews_alt.first.inner_text()
+            except:
+                pass
 
         elif platform_type == "Booking":
+            # --- RATING ---
             try:
                 rating_locator = page.locator('div[data-testid="review-score-component"]').first
                 rating_text = rating_locator.inner_text() if rating_locator.count() > 0 else None
@@ -330,15 +348,28 @@ def get_listing_data(page, url, platform_type):
             if rating_text:
                  try:
                     match = re.search(r"(\d+[,.]\d+)", rating_text)
-                    if match:
-                        rating = float(match.group(1).replace(',', '.'))
-                 except:
-                    pass
+                    if match: rating = float(match.group(1).replace(',', '.'))
+                 except: pass
+            
+            # --- TEXTO (Comentarios) ---
+            try:
+                # Booking suele tener "Lo que más gustó" y "Lo que menos"
+                # Intentamos coger el primer comentario de usuario visible
+                comment_loc = page.locator('div[data-testid="featured-review-text"]').first
+                if comment_loc.count() > 0:
+                    text = comment_loc.inner_text()
+                else:
+                    # Intentar buscar en lista de reviews si aparece en la home
+                    list_loc = page.locator('div.c-review-block__row').first
+                    if list_loc.count() > 0:
+                        text = list_loc.inner_text()
+            except:
+                pass
         
-        return rating
+        return rating, text
     except Exception as e:
         print(f"Error scraping {url}: {e}")
-        return None
+        return None, None
 
 def scrape_data_sync(accommodations_list):
     results = []
@@ -360,14 +391,15 @@ def scrape_data_sync(accommodations_list):
         total_tasks = len(tasks)
         
         for i, (name, platform, url) in enumerate(tasks):
-            rating = get_listing_data(page, url, platform)
+            rating, text = get_listing_data(page, url, platform)
             if rating is not None:
                 results.append({
                     "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "Platform": platform,
                     "Name": name,
                     "URL": url,
-                    "Rating": rating
+                    "Rating": rating,
+                    "Text": text
                 })
             else:
                 pass # Silent fail per individual item to not clutter logic

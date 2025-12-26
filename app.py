@@ -343,12 +343,13 @@ accommodations = load_accommodations()
 
 # --- FUNCIONES DE SCRAPING ---
 # --- FUNCIONES DE SCRAPING ---
+# --- FUNCIONES DE SCRAPING ---
 def get_listing_data(page, url, platform_type):
     try:
-        # User-Agent handling is done at context level, but good to be safe
-        print(f"🌍 Navigating to: {url} ({platform_type})") 
+        # User-Agent handling is done at context level
+        # st.write(f"🌍 {url}") # Demasiado ruido
         page.goto(url, timeout=60000)
-        page.wait_for_timeout(5000) # Wait for dynamic content
+        page.wait_for_timeout(5000) 
         
         rating = None
         text = None
@@ -356,49 +357,42 @@ def get_listing_data(page, url, platform_type):
         if platform_type == "Airbnb":
             # --- RATING ---
             try:
-                # 1. Guest Favorites Header
                 r_loc = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
                 if r_loc.count() > 0: rating = float(r_loc.inner_text().replace(',', '.'))
                 else:
-                    # 2. Classic Star/Rating
-                    r_loc = page.locator('span.a8jhwvl').first # New obfuscated
+                    r_loc = page.locator('span.a8jhwvl').first 
                     if r_loc.count() > 0: rating = float(r_loc.inner_text().split()[0].replace(',', '.'))
             except: pass
             
             # --- TEXTO ---
             try:
-                # Try generic semantic selectors first
-                # Look for the first review text block
                 candidates = [
                     'span[data-testid="pdp-reviews-review-item-text"]',
-                    '.r1bctolv', # Common obfuscated class for review text
+                    '.r1bctolv', 
                     '.ll4r2nl',
                     'div[id^="review-"] span'
                 ]
-                
                 for sel in candidates:
                     loc = page.locator(sel)
                     if loc.count() > 0:
                         text = loc.first.inner_text()
-                        print(f"✅ Found Airbnb Text ({sel}): {text[:30]}...")
+                        st.write(f"✅ Airbnb Text: *{text[:50]}...*") # Feedback Visual
                         break
             except Exception as e:
-                print(f"⚠️ Airbnb Text Error: {e}")
+                st.write(f"⚠️ Error textual Airbnb: {e}")
 
         elif platform_type == "Booking":
             # --- RATING ---
             try:
-                # Booking often puts rating in a distinct box
                 candidates_score = [
                     'div[data-testid="review-score-component"] div',
                     'div[data-testid="header-review-score"] div',
-                    '.ac4a7896c7' # Common score class
+                    '.ac4a7896c7' 
                 ]
                 for sel in candidates_score:
                     loc = page.locator(sel).first
                     if loc.count() > 0:
                         try:
-                            # Extract first number "8,5"
                             val = re.search(r"(\d+[,.]\d+)", loc.inner_text())
                             if val:
                                 rating = float(val.group(1).replace(',', '.'))
@@ -408,7 +402,6 @@ def get_listing_data(page, url, platform_type):
             
             # --- TEXTO ---
             try:
-                # Booking Featured Review
                 candidates_text = [
                     'div[data-testid="featured-review-text"]',
                     'div.c-review-block__row',
@@ -419,20 +412,19 @@ def get_listing_data(page, url, platform_type):
                     loc = page.locator(sel).first
                     if loc.count() > 0:
                         text = loc.inner_text()
-                        print(f"✅ Found Booking Text ({sel}): {text[:30]}...")
+                        st.write(f"✅ Booking Text: *{text[:50]}...*") # Feedback Visual
                         break
             except Exception as e:
-                print(f"⚠️ Booking Text Error: {e}")
+                st.write(f"⚠️ Error textual Booking: {e}")
         
-        # Default text if nothing found but page worked
         if not text:
-            text = "Comentario no detectado. (Posible selector anticuado)"
-            print(f"❌ Text NOT found for {url}")
+            # text = "Comentario no detectado."
+            st.warning(f"❌ Sin texto: {url}")
             
         return rating, text
         
     except Exception as e:
-        print(f"🔥 Error scraping {url}: {e}")
+        st.error(f"🔥 Error scraping {url}: {e}")
         return None, None
 
 def scrape_data_sync(accommodations_list):

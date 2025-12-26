@@ -1386,17 +1386,7 @@ elif page_selection == "Configuración":
 
 
 
-                            try:
-                                d, m_txt, y = match_bk.groups()
-                                m = month_map.get(m_txt.lower(), 1)
-                                new_date = datetime(int(y), m, int(d))
-                            except: pass
 
-                    if new_date:
-                         df_fix.loc[index, "Date"] = new_date.strftime("%Y-%m-%d %H:%M:%S")
-                         count_fixed += 1
-                    
-                    # --- RATING (NUEVO) ---
 
 
     with st.expander("➕ Añadir Nuevo Alojamiento"):

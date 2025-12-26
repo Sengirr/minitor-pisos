@@ -378,6 +378,16 @@ def get_listing_data(page, url, platform_type):
                         text = loc.first.inner_text()
                         st.write(f"✅ Airbnb Text: *{text[:50]}...*") # Feedback Visual
                         break
+                
+                # Fallback Bruto: Buscar el texto más largo visible si fallan los selectores
+                if not text:
+                    # Buscamos divs o spans con mucho texto (>50 chars)
+                    texts = page.locator("div, span").all_inner_texts()
+                    # Filtramos los que parecen reviews (largos)
+                    long_texts = [t for t in texts if len(t) > 60 and "Anfitrión" not in t and "Evaluación" not in t]
+                    if long_texts:
+                        text = long_texts[0] # Cogemos el primero largo
+                        st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 
@@ -414,6 +424,14 @@ def get_listing_data(page, url, platform_type):
                         text = loc.inner_text()
                         st.write(f"✅ Booking Text: *{text[:50]}...*") # Feedback Visual
                         break
+                
+                # Fallback Bruto Booking
+                if not text:
+                    texts = page.locator("div, p").all_inner_texts()
+                    long_texts = [t for t in texts if len(t) > 50 and " se abre en " not in t and "Ver disponibilidad" not in t]
+                    if long_texts:
+                         text = long_texts[0]
+                         st.write(f"⚠️ Booking Text (Brute): *{text[:50]}...*")
             except Exception as e:
                 st.write(f"⚠️ Error textual Booking: {e}")
         
@@ -443,9 +461,10 @@ def scrape_data_sync(accommodations_list):
                 st.error(f"❌ Error fatal instalando navegador: {e2}")
                 return []
 
-        page = browser.new_page()
+        # Simular Desktop real para evitar selectores móviles ocultos
+        page = browser.new_page(viewport={'width': 1920, 'height': 1080})
         page.set_extra_http_headers({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         })
 
         progress_text = "Sincronizando notas..."

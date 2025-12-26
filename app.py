@@ -1131,23 +1131,16 @@ if page_selection == "Dashboard":
                  st.info("Necesitas datos para detectar fantasmas.")
                 
         st.divider()
-
-
-
-                            
-
+        st.subheader("💬 Últimas Opiniones (Feed General)")
+        if not df_all_revs.empty:
+            st.dataframe(
+                df_all_revs[["Date", "Platform", "Name", "Text", "Category", "Cleaner"]].sort_values(by="Date", ascending=False).head(20),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No hay opiniones en este periodo.")
             
-            # 3. ÚLTIMAS OPINIONES (GENERAL)
-            st.subheader("💬 Últimas Opiniones (Feed General)")
-            if not df_all_revs.empty:
-                st.dataframe(
-                    df_all_revs[["Date", "Platform", "Name", "Text", "Category", "Cleaner"]].sort_values(by="Date", ascending=False).head(20),
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                st.info("No hay opiniones en este periodo.")
-                
         st.divider()
         
         # 4. RANKINGS (AL FINAL)

@@ -61,9 +61,12 @@ class GSheetsConnection:
             return df
         except Exception as e:
             # Mejorar debug: imprimir tipo de error y detalles
-            print(f"❌ Error GSheets (get_data): {type(e).__name__} - {e}")
+            err_msg = f"❌ Error GSheets (get_data): {type(e).__name__} - {e}"
+            print(err_msg)
+            # MOSTRAR ERROR VISIBLE EN LA APP (SOLO DEBUG)
+            st.sidebar.error(err_msg)
             if hasattr(e, 'response'):
-                print(f"Response Body: {e.response.text}")
+                st.sidebar.code(f"Response Body: {e.response.text}")
             return pd.DataFrame()
 
     def save_data(self, df, sheet_name="Reviews"):

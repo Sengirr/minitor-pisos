@@ -1,0 +1,20 @@
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.manifest
+.env
+.venv
+env/
+venv/
+PYTHONHELPER/
+
+# VS Code
+.vscode/
+
+# Local Data (Optional - remove if you want to commit your history)
+# historico_reviews.csv
+# historico_notas.csv

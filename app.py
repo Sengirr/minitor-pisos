@@ -1112,10 +1112,7 @@ if page_selection == "Dashboard":
                  else:
                      st.success("Sin quejas recientes.")
 
-                     df_n = pd.DataFrame(neg_rows).sort_values(by="Date", ascending=False).head(5)
-                     st.dataframe(df_n[["Date", "Name", "Text"]], use_container_width=True, hide_index=True)
-                 else:
-                     st.success("Sin quejas recientes.")
+
 
         st.divider()
 

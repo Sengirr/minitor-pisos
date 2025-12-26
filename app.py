@@ -107,6 +107,44 @@ def check_crisis(text):
             return True
     return False
 
+def is_review_negative(row):
+    """
+    Analiza si una reseña es negativa basándose en el texto y la plataforma.
+    Devuelve: (bool_es_negativa, str_nota_visual)
+    """
+    text = row.get("Text", "")
+    plat = row.get("Platform", "")
+    
+    # Sanitize
+    if not isinstance(text, str):
+        text = str(text) if pd.notna(text) else ""
+        
+    # 1. Booking (Busca patrón "Puntuación: 6,5")
+    match_bk = re.search(r"[⭐|Puntuación:]\s*(\d+[.,]\d+)", text)
+    if match_bk:
+        try: 
+            score = float(match_bk.group(1).replace(",", "."))
+            if plat == "Booking":
+                return (score < 7.5, f"{score:.1f}")
+        except: pass
+    
+    # 2. Airbnb (Busca patrón "Valoración: 3 estrellas")
+    match_ab = re.search(r"Valoración:\s*(\d+)\s*estrella", text, re.IGNORECASE)
+    if match_ab:
+        try: 
+            stars = int(match_ab.group(1))
+            if plat == "Airbnb":
+                    return (stars <= 3, f"{stars} ⭐")
+        except: pass
+        
+    # 3. Fallback IA (Categorías críticas detectadas por keywords)
+    cat = detect_category(text)
+    if cat not in ["General", "Otros"]:
+        # Si tiene categoría específica (Limpieza, Ruido, etc) asumimos que puede ser negativa o worth checking
+        return (True, "IA Detect")
+        
+    return (False, "-")
+
 # --- FUNCIONES DE CARGA/GUARDADO ---
 json_file = "alojamientos.json"
 cleaners_file = "cleaners.json"
@@ -1058,53 +1096,22 @@ if page_selection == "Dashboard":
         
         with c_recent:
             st.subheader("⚠️ Últimas Quejas")
-            # Logic similar to previous "Quejas" section but compacted
-        
-            def analyze_review_quality(row):
-                """Devuelve (EsNegativa, NotaVisual)"""
-                text = row["Text"]
-                plat = row["Platform"]
-                
-                # SANITIZE INPUT (Fixes TypeError)
-                if not isinstance(text, str):
-                    text = str(text) if pd.notna(text) else ""
-                
-                # 1. Booking
-                match_bk = re.search(r"[⭐|Puntuación:]\s*(\d+[.,]\d+)", text)
-                if match_bk:
-                    try: 
-                        score = float(match_bk.group(1).replace(",", "."))
-                        if plat == "Booking":
-                            return (score < 7.5, f"{score:.1f}")
-                    except: pass
-                
-                # 2. Airbnb
-                match_ab = re.search(r"Valoración:\s*(\d+)\s*estrella", text, re.IGNORECASE)
-                if match_ab:
-                    try: 
-                        stars = int(match_ab.group(1))
-                        if plat == "Airbnb":
-                             return (stars <= 3, f"{stars} ⭐")
-                    except: pass
-                    
-                # 3. Fallback IA
-                cat = detect_category(text)
-                if cat not in ["General", "Otros"]:
-                    return (True, "IA Detect")
-                    
-                return (False, "-")
-    
             if not df.empty:
                  # Reutilizamos logica de filtro de negativas
                  neg_rows = []
                  for i, row in df.iterrows():
-                     is_n, score = analyze_review_quality(row)
+                     is_n, score = is_review_negative(row)
                      if is_n:
                          r = row.copy()
                          r["NotaUI"] = score
                          neg_rows.append(r)
                  
                  if neg_rows:
+                     df_n = pd.DataFrame(neg_rows).sort_values(by="Date", ascending=False).head(5)
+                     st.dataframe(df_n[["Date", "Name", "Text"]], use_container_width=True, hide_index=True)
+                 else:
+                     st.success("Sin quejas recientes.")
+
                      df_n = pd.DataFrame(neg_rows).sort_values(by="Date", ascending=False).head(5)
                      st.dataframe(df_n[["Date", "Name", "Text"]], use_container_width=True, hide_index=True)
                  else:

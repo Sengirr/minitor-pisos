@@ -768,8 +768,20 @@ if page_selection == "Inteligencia Artificial":
 if page_selection == "Dashboard":
     st.title("📊 Monitor de Notas")
     
+    # DEBUG EXTREMO
+    st.write("🔍 DEBUG: Iniciando Carga de Datos...")
+    
     # Cargar todos los datos (Cloud o Local)
-    df = load_reviews_db()
+    try:
+        df = load_reviews_db()
+        st.write(f"🔍 DEBUG: Datos Cargados. Filas: {len(df)}")
+        if not df.empty:
+            st.dataframe(df.head())
+        else:
+            st.error("🔍 DEBUG: DataFrame está VACÍO tras la carga.")
+    except Exception as e:
+        st.error(f"💀 CRASH cargando DB: {e}")
+        df = pd.DataFrame()
     
     if not df.empty:
         if "Name" not in df.columns: df["Name"] = "Desconocido"

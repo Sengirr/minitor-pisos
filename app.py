@@ -1020,47 +1020,45 @@ if page_selection == "Dashboard":
         with col3:
              st.write("") # Spacer
              st.write("") # Spacer
-             if st.button("🔄 Sincronizar (2º Plano)", use_container_width=True, help="Ejecuta la sincronización en segundo plano. Puedes cambiar de pestaña mientras trabaja."):
+             if st.button("🔄 Sincronizar (Visible)", use_container_width=True, help="Ejecuta la sincronización en primer plano para ver el progreso detallado."):
                 if not accommodations:
                     st.error("Configura primero.")
                 else:
-                    # Lógica de Hilo
-                    import threading
-                    
-                    def _sync_worker():
-                        print("--- Inicio Sync en 2do Plano ---")
+                    # Ejecución en Primer Plano con Status de Streamlit
+                    with st.status("🚀 Iniciando Sincronización...", expanded=True) as status:
+                        st.write("Conectando con navegador...")
                         try:
+                            # 1. Scraping
                             new_data = scrape_data_sync(accommodations)
+                            
                             if new_data:
+                                status.update(label="💾 Guardando datos...", state="running")
                                 df_new = pd.DataFrame(new_data)
-                                # 1. Local
-                                header = not os.path.exists(csv_file)
-                                df_new.to_csv(csv_file, mode='a', header=header, index=False)
                                 
-                                # 2. Nube
+                                # 2. Guardar (La función save_reviews_db ya se encarga de mezclar y guardar en Nube/Local)
+                                # Pero load_reviews_db ya limpia duplicados, así que concat es seguro
+                                st.write(f"✅ Se encontraron {len(new_data)} reseñas nuevas.")
+                                
                                 current_db = load_reviews_db()
                                 full_db = pd.concat([current_db, df_new], ignore_index=True)
+                                
+                                # Guardar invocando la función maestra
                                 save_reviews_db(full_db)
                                 
-                                # LIMPIAR CACHÉ PARA QUE SE VEA AL MOMENTO
+                                # Limpiar caché
                                 load_reviews_db.clear()
                                 
-                                print(f"--- Fin Sync: {len(new_data)} nuevos ---")
+                                status.update(label="✅ Sincronización Completa!", state="complete", expanded=False)
+                                st.success(f"¡Listo! {len(new_data)} reseñas procesadas.")
+                                time.sleep(1)
+                                st.rerun()
                             else:
-                                print("--- Fin Sync: 0 nuevos ---")
+                                status.update(label="⚠️ No se encontraron nuevos datos.", state="complete", expanded=False)
+                                st.info("El proceso terminó pero no trajo reseñas nuevas (o falló el scraping). Revisa los logs arriba si aparecen.")
+                                
                         except Exception as e:
-                            print(f"--- Error Sync: {e} ---")
-
-                    # Lanzar Hilo
-                    t = threading.Thread(target=_sync_worker)
-                    t.start()
-                    
-                    st.toast("🚀 Sincronización iniciada en segundo plano...", icon="🏃‍♂️")
-                    st.info("La app está trabajando. Puedes cambiar de pestaña. Los datos aparecerán automáticamente cuando termine.")
-                    
-                    # Mensaje de éxito diferido monitorizando el hilo? (Complejo en Streamlit)
-                    # Simplemente dejamos que el Toast inicial avise.
-                    # El usuario verá los datos refrescarse.
+                            status.update(label="❌ Error en Sincronización", state="error")
+                            st.error(f"Error detallado: {e}")
 
         st.divider()
         

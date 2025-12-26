@@ -1060,13 +1060,14 @@ elif page_selection == "Comentarios":
     st.markdown("### 📥 Bandeja de Entrada")
     
     # Cargar DB
-    if os.path.exists(csv_file):
-        df_reviews = load_reviews_db()
-        
-        # APLICAR FILTRO GLOBAL TAMBIÉN AL INBOX?
+    # Cargar DB
+    df_reviews = load_reviews_db()
+    
+    # APLICAR FILTRO GLOBAL TAMBIÉN AL INBOX?
     # El usuario dijo "filtros en TODAS las funcionalidades".
     # Aunque sea "Inbox", si quiere ver lo de la "última semana", filtramos.
-    df_reviews = filter_by_date(df_reviews)
+    if not df_reviews.empty:
+        df_reviews = filter_by_date(df_reviews)
     
     if not df_reviews.empty and "New" in df_reviews.columns:
         # Filtrar las marcadas como New

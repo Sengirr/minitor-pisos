@@ -349,10 +349,15 @@ def get_listing_data(page, url, platform_type):
         # User-Agent handling is done at context level
         # st.write(f"🌍 {url}") # Demasiado ruido
         page.goto(url, timeout=60000)
-        page.wait_for_timeout(5000) 
+        # Lazy Loading Scroll
+        page.mouse.wheel(0, 1500)
+        page.wait_for_timeout(2000)
         
         rating = None
         text = None
+        
+        # Palabras prohibidas (header/footer)
+        IGNORE_m = ["Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", "Traducción", "Anfitrión", "Evaluación"]
         
         if platform_type == "Airbnb":
             # --- RATING ---
@@ -379,15 +384,17 @@ def get_listing_data(page, url, platform_type):
                         st.write(f"✅ Airbnb Text: *{text[:50]}...*") # Feedback Visual
                         break
                 
-                # Fallback Bruto: Buscar el texto más largo visible si fallan los selectores
+                # Fallback Bruto Mejorado
                 if not text:
-                    # Buscamos divs o spans con mucho texto (>50 chars)
-                    texts = page.locator("div, span").all_inner_texts()
-                    # Filtramos los que parecen reviews (largos)
-                    long_texts = [t for t in texts if len(t) > 60 and "Anfitrión" not in t and "Evaluación" not in t]
-                    if long_texts:
-                        text = long_texts[0] # Cogemos el primero largo
-                        st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
+                    # Intentar buscar solo en el main para evitar headers
+                    possible_texts = page.locator("main").locator("div, span").all_inner_texts()
+                    if not possible_texts: possible_texts = page.locator("body").locator("div, span").all_inner_texts()
+                    
+                    for t in possible_texts:
+                        if len(t) > 60 and not any(bad in t for bad in IGNORE_m):
+                             text = t
+                             st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
+                             break
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 
@@ -426,12 +433,16 @@ def get_listing_data(page, url, platform_type):
                         break
                 
                 # Fallback Bruto Booking
+                IGNORE_b = ["Registra tu alojamiento", "Hazte una cuenta", "Iniciar sesión", "Buscar", "Ver disponibilidad"]
                 if not text:
-                    texts = page.locator("div, p").all_inner_texts()
-                    long_texts = [t for t in texts if len(t) > 50 and " se abre en " not in t and "Ver disponibilidad" not in t]
-                    if long_texts:
-                         text = long_texts[0]
-                         st.write(f"⚠️ Booking Text (Brute): *{text[:50]}...*")
+                    possible_texts = page.locator("div[data-testid='property-section-reviews']").locator("div, p").all_inner_texts()
+                    if not possible_texts: possible_texts = page.locator("main").locator("div, p").all_inner_texts()
+                    
+                    for t in possible_texts:
+                         if len(t) > 50 and not any(bad in t for bad in IGNORE_b):
+                             text = t
+                             st.write(f"⚠️ Booking Text (Brute): *{text[:50]}...*")
+                             break
             except Exception as e:
                 st.write(f"⚠️ Error textual Booking: {e}")
         

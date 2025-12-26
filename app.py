@@ -459,6 +459,9 @@ def scrape_data_sync(accommodations_list):
         total_tasks = len(tasks)
         
         for i, (name, platform, url) in enumerate(tasks):
+            # Update Progress BEFORE work starts
+            my_bar.progress(i / total_tasks, text=f"🔎 Procesando: {name} ({platform})...")
+            
             rating, text = get_listing_data(page, url, platform)
             if rating is not None:
                 results.append({
@@ -470,9 +473,10 @@ def scrape_data_sync(accommodations_list):
                     "Text": text
                 })
             else:
-                pass # Silent fail per individual item to not clutter logic
-            
-            my_bar.progress((i + 1) / total_tasks, text=f"Procesando {name} ({platform})...")
+                pass 
+                
+            # Update to next tick
+            my_bar.progress((i + 1) / total_tasks)
 
         browser.close()
         my_bar.empty()

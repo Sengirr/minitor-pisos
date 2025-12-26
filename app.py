@@ -1298,6 +1298,18 @@ elif page_selection == "Configuración":
 
     st.title("⚙️ Configuración de Alojamientos")
     
+    # --- DEBUG SECTION (Solo para verificar Nube) ---
+    with st.expander("🛠️ Debug: Diagnóstico de Nube"):
+        if GS_CONN and GS_CONN.connect():
+            df_debug = GS_CONN.get_data()
+            st.write(f"Filas en Google Sheets: **{len(df_debug)}**")
+            if not df_debug.empty:
+                st.dataframe(df_debug.head())
+            else:
+                st.warning("Google Sheets está vacío.")
+        else:
+            st.error("No se pudo conectar a GSheets para diagnóstico.")
+    
     st.markdown("Aquí puedes gestionar tu lista de pisos y tu equipo.")
     
     # GESTION DE EQUIPO (MOVIDO A PÁGINA LIMPIEZA)

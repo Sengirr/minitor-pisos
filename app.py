@@ -408,10 +408,7 @@ def get_listing_data(page, url, platform_type):
                             break 
                     if text: break
                 
-                # Fallback Bruto (Last Resort)
-                if not text:
-                    # ... (rest of brute force logic) ...
-                
+
                 # Fallback Bruto Mejorado (ANTI-PRECIO + ANTI-DESC)
                 if not text:
                     # Buscamos <p> o <span> profundos, evitando headers
@@ -436,7 +433,13 @@ def get_listing_data(page, url, platform_type):
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 
         elif platform_type == "Booking":
-            # ... (Rating logic) ...
+            # Intentar click en pestaña de reviews si existe (Desktop)
+            try:
+                page.locator("[data-testid='Property-Header-Nav-Tab-Trigger-reviews']").click(timeout=2000)
+                page.wait_for_timeout(2000)
+            except: pass
+            
+            # --- RATING ---
             try:
                 candidates_score = [
                     'div[data-testid="review-score-component"] div',

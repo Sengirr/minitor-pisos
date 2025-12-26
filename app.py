@@ -348,10 +348,15 @@ def get_listing_data(page, url, platform_type):
     try:
         # User-Agent handling is done at context level
         # st.write(f"🌍 {url}") # Demasiado ruido
-        page.goto(url, timeout=60000)
-        # Lazy Loading Scroll
-        page.mouse.wheel(0, 1500)
-        page.wait_for_timeout(2000)
+        # OPTIMIZACIÓN: No esperar a que carguen todas las imágenes (domcontentloaded)
+        page.goto(url, timeout=30000, wait_until="domcontentloaded")
+        
+        # Lazy Loading Scroll (Simple y Rápido)
+        # En lugar de lógica compleja, bajamos al fondo y subimos un poco
+        page.keyboard.press("End")
+        page.wait_for_timeout(1000)
+        page.keyboard.press("PageUp")
+        page.wait_for_timeout(500)
         
         # DEBUG: Confirmar dónde estamos
         try: 
@@ -376,6 +381,23 @@ def get_listing_data(page, url, platform_type):
         ]
         
         if platform_type == "Airbnb":
+            # --- AIRBNB (Fast Click & Read) ---
+            try:
+                # Click "Mostrar todas" si existe (Timeouts cortos para no atascarse)
+                clicked = False
+                btn = page.locator('[data-testid="pdp-show-all-reviews-button"]').first
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click(timeout=1000)
+                    clicked = True
+                
+                if not clicked:
+                     try:
+                         page.get_by_text(re.compile(r"(\d+ (evaluaciones|reviews)|Mostrar)", re.IGNORECASE)).first.click(timeout=1000)
+                     except: pass
+                
+                page.wait_for_timeout(1000) 
+            except: pass
+
             # ... (Rating logic remains) ...
             try:
                 r_loc = page.get_by_text(re.compile(r"^\d+,\d{2}$")).first
@@ -385,58 +407,70 @@ def get_listing_data(page, url, platform_type):
                     if r_loc.count() > 0: rating = float(r_loc.inner_text().split()[0].replace(',', '.'))
             except: pass
             
-            # --- TEXTO (Estrategia "Pesca de Arrastre Silenciosa") ---
+            # --- TEXTO ---
             try:
-                # 1. Definimos qué es "basura" (etiquetas, menús, botones)
-                IGNORE_PHRASES = [
-                    "Alojamientos", "Experiencias", "Regístrate", "Inicia sesión", "Menú", 
-                    "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda", 
-                    "Compartir", "Guardar", "pestaña", "fechas", "precios", "consultar", 
-                    "Alojamiento entero", "Superanfitrión", "cancelación",
-                    "Muy buena comunicación", "Llegada autónoma", "Date un buen chapuzón", "años de experiencia",
-                    "Mostrar más", "traducido automáticamente", "Mostrar el original"
-                ]
+                reviews_data = []
 
-                # 2. Cogemos TODO el texto "prometedor" visibles (párrafos, spans, divs de texto)
-                candidates = page.locator("div[dir='ltr'], span.ll4r2nl, span.r1bctolv, div[id^='review-']").all_inner_texts()
+                # Intento 1: Tarjetas Estructuradas (Modal o Página)
+                airbnb_cards = page.locator('div[data-testid="pdp-reviews-review-item"], div[data-review-id], div._1gjypya, div[role="listitem"]').all()
+
+                for card in airbnb_cards:
+                    try:
+                        name = card.locator("h2, h3, div[font-weight='bold']").first.inner_text().strip()
+                    except: name = "Anónimo"
+                    
+                    try:
+                        body = card.locator("span[data-testid='pdp-reviews-review-item-text'], div[dir='ltr']").first.inner_text().strip()
+                    except: body = ""
+
+                    if body and len(body) > 10:
+                        reviews_data.append(f"👤 {name}: {body}")
+
+                # Intento 2: Fallback Texto plano (div[dir='ltr'])
+                if not reviews_data:
+                    candidates = page.locator("div[dir='ltr']").all_inner_texts()
+                    seen = set()
+                    for t in candidates:
+                         t_clean = t.strip()
+                         if t_clean in seen: continue
+                         if len(t_clean) < 15: continue
+                         if "Traducir" in t_clean or "Mostrar más" in t_clean or "Evaluación" in t_clean: continue
+                         
+                         reviews_data.append(f"💬 {t_clean}")
+                         seen.add(t_clean)
                 
-                # Si fallan los selectores finos, cogemos <p> y <span> generales
-                if not candidates:
-                    candidates = page.locator("main span, main p, body span, body p").all_inner_texts()
-
-                valid_texts = []
-                for t in candidates:
-                    # Limpieza básica
-                    t_clean = t.strip()
-                    if len(t_clean) < 70: continue # Muy corto para ser review
-                    if len(t_clean) > 2000: continue # Muy largo (probablemente descripción de la casa)
-                    
-                    # Chequeo de prohibidas
-                    if any(bad.lower() in t_clean.lower() for bad in IGNORE_PHRASES): continue
-                    if "€" in t_clean: continue # Precios
-                    
-                    valid_texts.append(t_clean)
-
-                # 3. Selección del Mejor Candidato
-                # Preferimos el texto más largo que haya sobrevivido a la criba
-                if valid_texts:
-                    # Ordenamos por longitud (descendente)
-                    valid_texts.sort(key=len, reverse=True)
-                    text = valid_texts[0] # El ganador
-                    st.write(f"✅ Airbnb Comentario detectado: *{text[:60]}...*")
+                # Output Final Airbnb
+                if reviews_data:
+                    final_reviews = reviews_data # Sin límite
+                    combined_text = " || ".join(final_reviews)
+                    st.write(f"✅ Airbnb Comentarios ({len(final_reviews)}): *{combined_text[:200]}...*")
+                    text = combined_text
                 else:
-                    # Si no hay nada, no decimos "Error", simplemente no mostramos nada para no asustar
-                    pass
+                     st.write(f"⚠️ Airbnb: No se encontraron comentarios. (URL: {url})")
 
             except Exception as e:
-                # Log silencioso solo para debug real
-                print(f"Airbnb scrape warning: {e}")
-
+                print(f"Airbnb Scrape error: {e}")
         elif platform_type == "Booking":
             # --- BOOKING (Click + Silent Scrape) ---
             try:
-                page.locator("[data-testid='Property-Header-Nav-Tab-Trigger-reviews']").click(timeout=1000)
-                page.wait_for_timeout(1000)
+                # Intentamos clicar en la pestaña de comentarios (varios selectores)
+                clicked = False
+                for sel in ["[data-testid='Property-Header-Nav-Tab-Trigger-reviews']", "#reviews-tab", "a#show_reviews_tab"]:
+                    try:
+                        if page.locator(sel).first.is_visible():
+                            page.locator(sel).first.click(timeout=1000)
+                            clicked = True
+                            break
+                    except: pass
+                
+                # Si fallan los selectores técnicos, probamos por texto (idiomas comunes)
+                if not clicked:
+                    try:
+                        page.get_by_text(re.compile(r"(Comentarios|Reviews|Opiniones|Huéspedes)", re.IGNORECASE)).first.click(timeout=1000)
+                    except: pass
+                
+                # Damos tiempo a que cargue (Booking es lento/lazy)
+                page.wait_for_timeout(2000)
             except: pass
             
             # Rating logic...
@@ -453,24 +487,70 @@ def get_listing_data(page, url, platform_type):
             
             # Texto logic...
             try:
-                IGNORE_B = ["Tipo de alojamiento", "Número de personas", "Buscar", "Ver disponibilidad"]
+                IGNORE_B = [
+                    "Tipo de alojamiento", "Número de personas", "Buscar", "Ver disponibilidad",
+                    "Gestionado por", "Puntuación de los comentarios", "Entrada Desde", "Salida Hasta",
+                    "Condiciones sobre", "política de cancelación", "cancelación", "Información del alojamiento",
+                    "Vivienda", "Beachfront", "Apartamento", "Apartment",
+                    "Ubicación excelente", "Ver mapa", "Atracciones turísticas",
+                    "Preguntas frecuentes", "Lo que más gustó a quienes",
+                    "¿Cuántas personas", "pueden dormir", "se permiten mascotas", "hay cuna",
+                    "aparcar", "desayunos", "restaurante",
+                    "Información legal", "gestiona, autoriza o representa", "Esta etiqueta no",
+                    "despedidas de soltero", "celebrar fiestas", "normas de la casa",
+                    "precio de las cunas", "pagar por separado", "precio total",
+                    "¿Qué hay cerca?", "lugares de interés", "Aeropuerto", "cafeterías",
+                    "¿Cuánto cuesta alojarse", "¿Qué se puede hacer",
+                    "Condiciones para estancias", "alojar niños", "de cualquier edad",
+                    "Transporte público", "Tren", "Metro", "autobús",
+                    "algunas opciones de alojamiento", "Encontrarás más información",
+                    "Los precios en", "pueden variar en función",
+                    "¿Cómo lo estamos haciendo?", "Me resulta fácil", "opción que necesito"
+                ]
                 
                 # Intentamos coger bloques de texto en la sección de reviews
-                candidates = page.locator("[data-testid='review-subtext'], [data-testid='featured-review-text'], .c-review__body").all_inner_texts()
+                # ESTRATEGIA: La clásica que funcionaba. Selectores de texto + Filtrado.
+                candidates = page.locator("""
+                    [data-testid='review-subtext'], 
+                    [data-testid='featured-review-text'], 
+                    [data-testid='review-text'],
+                    [data-testid='review-title'],
+                    .c-review__body,
+                    .c-review__title
+                """).all_inner_texts()
+                
                 if not candidates:
-                    candidates = page.locator("div[data-testid='property-section-reviews'] div, main div").all_inner_texts()
+                    candidates = page.locator("""
+                        div[data-testid='property-section-reviews'] div, 
+                        ul[data-testid='reviews-list'] li div,
+                        .c-review-block,
+                        .review_list_new_item_block
+                    """).all_inner_texts()
 
                 valid_texts = []
+                seen = set() # Deduplicación
                 for t in candidates:
                     t_clean = t.strip()
-                    if len(t_clean) < 50: continue
-                    if any(bad in t_clean for bad in IGNORE_B): continue
+                    if t_clean in seen: continue
+                    
+                    # 1. Filtro de Longitud
+                    if len(t_clean) < 15: continue
+                    # 2. Filtro de "Basura Conocida"
+                    if any(bad.lower() in t_clean.lower() for bad in IGNORE_B): continue
+                    
+                    # 3. Filtros extra
+                    if "?" in t_clean and len(t_clean) < 100: continue 
+                    if "m²" in t_clean and "cocina" in t_clean.lower(): continue
+                    
                     valid_texts.append(t_clean)
+                    seen.add(t_clean)
                 
                 if valid_texts:
-                    valid_texts.sort(key=len, reverse=True)
-                    text = valid_texts[0]
-                    st.write(f"✅ Booking Comentario detectado: *{text[:60]}...*")
+                    # Ordenamos por longitud para que las reviews largas salgan primero (suelen ser las mejores)
+                    # valid_texts.sort(key=len, reverse=True) -> El usuario prefiere orden natural
+                    # Sin límite, todos los que pillemos
+                    text = " || ".join(valid_texts)
+                    st.write(f"✅ Booking Comentarios detectados ({len(valid_texts)}): *{text[:100]}...*")
 
             except Exception: pass
         

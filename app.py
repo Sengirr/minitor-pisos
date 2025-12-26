@@ -353,6 +353,12 @@ def get_listing_data(page, url, platform_type):
         page.mouse.wheel(0, 1500)
         page.wait_for_timeout(2000)
         
+        # DEBUG: Confirmar dónde estamos
+        try: 
+            p_title = page.title()
+            st.write(f"📄 Título: {p_title}")
+        except: pass
+        
         rating = None
         text = None
         
@@ -394,13 +400,17 @@ def get_listing_data(page, url, platform_type):
                     for t in possible_texts:
                         # Filtro de Calidad:
                         # 1. Longitud > 80 (evita titulos cortos)
-                        # 2. No contiene palabras de sistema (Menu, Búsqueda)
-                        # 3. No es una repetición loca (NUEVO NUEVO)
-                        is_menu = any(bad in t for bad in IGNORE_m)
+                        # 2. No contiene palabras de sistema (Menu, Búsqueda) - CASE INSENSITIVE
+                        t_lower = t.lower()
+                        is_menu = any(bad.lower() in t_lower for bad in IGNORE_m)
+                        
                         if len(t) > 80 and not is_menu:
                              text = t
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
+                        elif len(t) > 80 and is_menu:
+                             # DEBUG: Ver qué estamos rechazando
+                             st.write(f"🚫 Rechazado (Menu): {t[:20]}...")
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")
 

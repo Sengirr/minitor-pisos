@@ -371,7 +371,8 @@ def get_listing_data(page, url, platform_type):
             "Traducción", "Anfitrión", "Evaluación", "NUEVO", "Búsqueda", 
             "Compartir", "Guardar", "pestaña", "fechas", "precios", "consultar", 
             "Alojamiento entero", "Superanfitrión", "cancelación",
-            "Muy buena comunicación", "Llegada autónoma", "Date un buen chapuzón", "años de experiencia"
+            "Muy buena comunicación", "Llegada autónoma", "Date un buen chapuzón", "años de experiencia",
+            "Mostrar más", "traducido automáticamente", "Mostrar el original"
         ]
         
         if platform_type == "Airbnb":
@@ -408,12 +409,12 @@ def get_listing_data(page, url, platform_type):
                         
                         has_price = "€" in text_cand or "$" in text_cand
                         
-                        # Must be substantial text and not menu
-                        if len(text_cand) > 100 and not is_menu and not has_price:
+                        # BAJAMOS EXIGENCIA A 70 chars para pillar reviews cortas ("Muy bonito lugar...")
+                        if len(text_cand) > 70 and not is_menu and not has_price:
                             text = text_cand
                             st.write(f"✅ Airbnb Text: *{text[:50]}...*") 
                             break 
-                        elif len(text_cand) > 100 and is_menu:
+                        elif len(text_cand) > 70 and is_menu:
                              st.write(f"🚫 Rechazado (Culpa de '{bad_word_found}'): {text_cand[:30]}...")
                     if text: break
                 
@@ -432,12 +433,12 @@ def get_listing_data(page, url, platform_type):
                         # Filtro extra: Evitar widgets de precios ("350€ noche")
                         has_price = "€" in t or "$" in t
                         
-                        # Subimos exigencia a 100 chars para evitar descripciones cortas
-                        if len(t) > 100 and not is_menu and not has_price:
+                        # BAJAMOS EXIGENCIA A 70 chars
+                        if len(t) > 70 and not is_menu and not has_price:
                              text = t
                              st.write(f"⚠️ Text (Brute Force): *{text[:50]}...*")
                              break
-                        elif len(t) > 100 and is_menu:
+                        elif len(t) > 70 and is_menu:
                              st.write(f"🚫 Rechazado (Culpa de '{bad_word_found}'): {t[:20]}...")
             except Exception as e:
                 st.write(f"⚠️ Error textual Airbnb: {e}")

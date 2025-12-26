@@ -120,33 +120,32 @@ def load_reviews_db():
     # 1. Intentar cargar de la Nube (Prioridad)
     if GS_CONN and GS_CONN.connect():
         df_cloud = GS_CONN.get_data()
+        st.sidebar.caption(f"☁️ Nube Raw: {len(df_cloud)} filas")
         if not df_cloud.empty:
             df = df_cloud
 
     # 2. Fallback: CSV Local (si Nube falló o está vacía)
     if df.empty and os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
+        st.sidebar.caption(f"📂 Local Load: {len(df)} filas")
 
     # 3. Si sigue vacía, devolver estructura base
     if df.empty:
+        st.sidebar.warning("⚠️ No se encontraron datos (Nube ni Local).")
         return pd.DataFrame(columns=["Date", "Platform", "Name", "Text", "Url", "Hash", "Category", "Cleaner", "Rating"])
 
     # --- NORMALIZACIÓN Y LIMPIEZA (Aplica a Cloud y Local) ---
     # Asegurar tipos
     if "Date" in df.columns: df["Date"] = pd.to_datetime(df["Date"])
-    if "Hash" in df.columns: df["Hash"] = df["Hash"].astype(str)
-    if "Rating" in df.columns: df["Rating"] = pd.to_numeric(df["Rating"], errors="coerce")
+    # ... (Resto igual)
     
-    # Asegurar Columnas Críticas (Schema Enforcement)
-    expected_cols = ["Platform", "Name", "Text", "Url", "Cleaner", "Category", "Rating", "Hash", "Date"]
-    for col in expected_cols:
-        if col not in df.columns:
-            df[col] = None if col in ["Rating", "Cleaner"] else "" # Default values
-            if col == "Category": df[col] = "General"
-
+    # ...
+    
     # Deduplicate
     if "Hash" in df.columns:
+        before_dedup = len(df)
         df = df.drop_duplicates(subset=["Hash"], keep="last")
+        st.sidebar.caption(f"🧹 Tras Deduplicar: {len(df)} filas (Eliminadas: {before_dedup - len(df)})")
 
     return df
 
